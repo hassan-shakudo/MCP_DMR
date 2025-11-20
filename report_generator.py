@@ -339,15 +339,16 @@ class ReportGenerator:
                 
                 # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
                 worksheet.write(current_row, 0, f"PR % of {dept_title}", row_header_fmt)
-                percent_fmt = workbook.add_format({'border': 1, 'num_format': '0.00'})
+                percent_fmt = workbook.add_format({'border': 1, 'num_format': '0"%"'})
                 for i, r_name in enumerate(range_names):
                     revenue = abs(processed_revenue[r_name].get(dept, 0))
                     payroll = abs(processed_payroll[r_name].get(dept, 0))
                     
-                    if payroll != 0:
-                        percentage = (revenue / payroll) * 100
+                    # If either revenue or payroll is 0, show 0%
+                    if revenue == 0 or payroll == 0:
+                        percentage = 0
                     else:
-                        percentage = 0  # Avoid division by zero
+                        percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
                     
                     worksheet.write(current_row, i + 1, percentage, percent_fmt)
                 current_row += 1
