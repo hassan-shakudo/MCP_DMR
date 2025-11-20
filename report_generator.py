@@ -72,9 +72,6 @@ class ReportGenerator:
         
         if not df.empty:
             print(f"   ✓ Retrieved {len(df)} visit records")
-            if 'visits' in df.columns or len(df.columns) > 0:
-                total_visits = df.iloc[:, -1].sum() if len(df) > 0 else 0
-                print(f"   ✓ Total Visits: {total_visits:,.0f}")
         else:
             print("   ⚠ No visits data found")
         
@@ -92,23 +89,6 @@ class ReportGenerator:
             print(f"   ✓ Retrieved {len(df)} weather records")
         else:
             print("   ⚠ No weather data found")
-        
-        return df
-    
-    def generate_complex_revenue_report(self, conn, database: str, group_no: int,
-                                       date_ini: str, date_end: str) -> pd.DataFrame:
-        """Generate complex revenue report with department breakdown"""
-        print(f"\n💰 Generating Complex Revenue Report for {database}...")
-        
-        query = get_revenue_query(database, group_no, date_ini, date_end)
-        df = execute_query_to_dataframe(conn, query)
-        
-        if not df.empty:
-            print(f"   ✓ Retrieved {len(df)} detailed revenue records")
-            if 'revenue' in df.columns:
-                print(f"   ✓ Total Revenue: ${df['revenue'].sum():,.2f}")
-        else:
-            print("   ⚠ No complex revenue data found")
         
         return df
     
@@ -201,7 +181,7 @@ class ReportGenerator:
                 try:
                     visits_df = self.generate_visits_report(
                         conn, resort, date_ini, date_end
-                    )
+                    ) 
                     file_path = self.save_report(visits_df, "visits", resort)
                     if file_path:
                         saved_files.append(file_path)
@@ -218,19 +198,6 @@ class ReportGenerator:
                         saved_files.append(file_path)
                 except Exception as e:
                     print(f"   ✗ Error generating weather report: {e}")
-                
-                # Generate Complex Revenue Report
-                try:
-                    complex_revenue_df = self.generate_complex_revenue_report(
-                        conn, database, group_no,
-                        date_ini.strftime('%Y-%m-%d'),
-                        date_end.strftime('%Y-%m-%d 23:59:59')
-                    )
-                    file_path = self.save_report(complex_revenue_df, "revenue_detailed", resort)
-                    if file_path:
-                        saved_files.append(file_path)
-                except Exception as e:
-                    print(f"   ✗ Error generating complex revenue report: {e}")
                 
         except Exception as e:
             print(f"\n✗ Database connection error: {e}")
