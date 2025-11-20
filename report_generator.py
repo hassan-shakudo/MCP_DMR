@@ -4,13 +4,14 @@ Mountain Capital Partners - Ski Resort Data Analysis
 """
 
 import os
-from datetime import datetime, timedelta
-from typing import List
 import pandas as pd
+import xlsxwriter
+from datetime import datetime
+from typing import List, Dict, Any, Tuple
 
 from db_connection import DatabaseConnection
 from stored_procedures import StoredProcedures
-from db_queries import execute_query_to_dataframe, get_revenue_query
+from data_utils import DateRangeCalculator
 
 
 class ReportGenerator:
@@ -21,7 +22,7 @@ class ReportGenerator:
         Initialize report generator
         
         Args:
-            output_dir: Directory to save CSV reports
+            output_dir: Directory to save reports
         """
         self.output_dir = output_dir
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -30,189 +31,288 @@ class ReportGenerator:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             print(f"✓ Created output directory: {output_dir}")
-    
-    def generate_revenue_report(self, conn, database: str, group_no: int, 
-                               date_ini: datetime, date_end: datetime) -> pd.DataFrame:
-        """Generate revenue report"""
-        print(f"\n📊 Generating Revenue Report for {database}...")
-        
-        sp = StoredProcedures(conn)
-        df = sp.execute_revenue(database, group_no, date_ini, date_end)
-        
-        if not df.empty:
-            print(f"   ✓ Retrieved {len(df)} revenue records")
-            print(f"   ✓ Total Revenue: ${df.iloc[:, -1].sum():,.2f}" if len(df.columns) > 0 else "")
-        else:
-            print("   ⚠ No revenue data found")
-        
-        return df
-    
-    def generate_payroll_report(self, conn, resort: str, 
-                               date_ini: datetime, date_end: datetime) -> pd.DataFrame:
-        """Generate payroll report"""
-        print(f"\n💼 Generating Payroll Report for {resort}...")
-        
-        sp = StoredProcedures(conn)
-        df = sp.execute_payroll(resort, date_ini, date_end)
-        
-        if not df.empty:
-            print(f"   ✓ Retrieved {len(df)} payroll records")
-        else:
-            print("   ⚠ No payroll data found")
-        
-        return df
-    
-    def generate_visits_report(self, conn, resort: str, 
-                              date_ini: datetime, date_end: datetime) -> pd.DataFrame:
-        """Generate visits report"""
-        print(f"\n👥 Generating Visits Report for {resort}...")
-        
-        sp = StoredProcedures(conn)
-        df = sp.execute_visits(resort, date_ini, date_end)
-        
-        if not df.empty:
-            print(f"   ✓ Retrieved {len(df)} visit records")
-        else:
-            print("   ⚠ No visits data found")
-        
-        return df
-    
-    def generate_weather_report(self, conn, resort: str, 
-                               date_ini: datetime, date_end: datetime) -> pd.DataFrame:
-        """Generate weather/snow report"""
-        print(f"\n🌨️  Generating Weather Report for {resort}...")
-        
-        sp = StoredProcedures(conn)
-        df = sp.execute_weather(resort, date_ini, date_end)
-        
-        if not df.empty:
-            print(f"   ✓ Retrieved {len(df)} weather records")
-        else:
-            print("   ⚠ No weather data found")
-        
-        return df
-    
-    def save_report(self, df: pd.DataFrame, report_name: str, resort: str = "") -> str:
+            
+    def generate_comprehensive_report(self, 
+                                    resort_config: Dict[str, Any], 
+                                    run_date: datetime = None) -> str:
         """
-        Save DataFrame as CSV
+        Generate the comprehensive Excel report for a resort.
         
         Args:
-            df: DataFrame to save
-            report_name: Name of the report (e.g., 'revenue', 'payroll')
-            resort: Resort name (optional)
+            resort_config: Dictionary containing resort details (dbName, resortName, groupNum)
+            run_date: Date the report is being run (default now)
             
         Returns:
-            Path to saved file
+            Path to saved Excel file
         """
-        if df.empty:
-            print(f"   ⚠ Skipping empty report: {report_name}")
-            return ""
+        if run_date is None:
+            run_date = datetime.now()
+            
+        resort_name = resort_config.get('resortName', 'Unknown')
+        db_name = resort_config.get('dbName', resort_name)
+        group_num = resort_config.get('groupNum', -1)
         
-        # Create filename
-        resort_prefix = f"{resort}_" if resort else ""
-        filename = f"{resort_prefix}{report_name}_{self.timestamp}.csv"
+        print(f"\n📊 Generating Comprehensive Report for {resort_name}...")
+        print(f"📅 Run Date: {run_date.strftime('%Y-%m-%d')}")
+
+        # 1. Calculate Date Ranges
+        date_calc = DateRangeCalculator(run_date)
+        ranges = date_calc.get_all_ranges()
+        range_names = [
+            "For The Day (Actual)", "For The Day (Prior Year)",
+            "For The Week Ending (Actual)", "For The Week Ending (Prior Year)",
+            "For Winter Ending (Actual)", "For Winter Ending (Prior Year)"
+        ]
+        
+        # 2. Fetch Data for all ranges
+        data_store = {name: {} for name in range_names}
+        
+        with DatabaseConnection() as conn:
+            sp = StoredProcedures(conn)
+            
+            for r_name in range_names:
+                start, end = ranges[r_name]
+                print(f"   ⏳ Fetching data for {r_name} ({start.date()} - {end.date()})...")
+                
+                # Revenue
+                rev_df = sp.execute_revenue(db_name, group_num, start, end)
+                data_store[r_name]['revenue'] = rev_df
+                
+                # Payroll
+                pay_df = sp.execute_payroll(resort_name, start, end)
+                data_store[r_name]['payroll'] = pay_df
+                
+                # Visits
+                vis_df = sp.execute_visits(resort_name, start, end)
+                data_store[r_name]['visits'] = vis_df
+                
+                # Weather/Snow
+                snow_df = sp.execute_weather(resort_name, start, end)
+                data_store[r_name]['snow'] = snow_df
+
+        # 3. Process Data and Collect Row Headers
+        all_locations = set()
+        all_depts = set()
+        
+        # Processed data structure: category -> range -> key -> value
+        processed_snow = {r: {'snow_24hrs': 0.0, 'base_depth': 0.0} for r in range_names}
+        processed_visits = {r: {} for r in range_names} # loc -> sum
+        processed_revenue = {r: {} for r in range_names} # dept -> sum
+        processed_payroll = {r: {} for r in range_names} # dept -> sum
+        
+        # Helper to guess column names if they vary
+        def get_col(df, candidates):
+            for c in candidates:
+                if c in df.columns:
+                    return c
+            return None
+
+        for r_name in range_names:
+            # --- Snow ---
+            df = data_store[r_name]['snow']
+            if not df.empty:
+                # Sum snow_24hrs
+                snow_col = get_col(df, ['snow_24hrs', 'Snow24Hrs', 'Snow_24hrs'])
+                base_col = get_col(df, ['base_depth', 'BaseDepth', 'Base_Depth'])
+                
+                if snow_col:
+                    processed_snow[r_name]['snow_24hrs'] = df[snow_col].sum()
+                if base_col:
+                    processed_snow[r_name]['base_depth'] = df[base_col].sum() # Instruction: "sum up"
+
+            # --- Visits ---
+            df = data_store[r_name]['visits']
+            if not df.empty:
+                loc_col = get_col(df, ['Location', 'location', 'Resort', 'resort'])
+                val_col = get_col(df, ['Visits', 'visits', 'Count', 'count']) # Guessing value column
+                
+                # If no explicit value column, maybe count rows? 
+                # User said "sum up the visits". 
+                # If DataFrame has one row per visit, we count. If it has aggregated 'Visits' col, we sum.
+                # Assuming 'Visits' column exists or we sum rows if no obvious numeric column found?
+                # Let's look for numeric columns.
+                if not val_col:
+                    # Fallback: look for any numeric column that isn't an ID
+                    numerics = df.select_dtypes(include=['number']).columns
+                    if len(numerics) > 0:
+                        val_col = numerics[-1] # Pick last numeric? risky.
+                
+                if loc_col:
+                    # Group and sum
+                    if val_col:
+                        grouped = df.groupby(loc_col)[val_col].sum()
+                    else:
+                        # Count rows per location
+                        grouped = df.groupby(loc_col).size()
+                        
+                    for loc, val in grouped.items():
+                        loc_str = str(loc)
+                        processed_visits[r_name][loc_str] = val
+                        all_locations.add(loc_str)
+
+            # --- Revenue ---
+            df = data_store[r_name]['revenue']
+            if not df.empty:
+                dept_col = get_col(df, ['DepartmentTitle', 'Department', 'department_title'])
+                rev_col = get_col(df, ['Revenue', 'revenue', 'Amount', 'amount']) # Guessing
+                
+                # Find likely revenue column if not explicit
+                if not rev_col:
+                     numerics = df.select_dtypes(include=['number']).columns
+                     # Usually the last numeric column is the amount
+                     if len(numerics) > 0:
+                         rev_col = numerics[-1]
+
+                if dept_col and rev_col:
+                    grouped = df.groupby(dept_col)[rev_col].sum()
+                    for dept, val in grouped.items():
+                        dept_str = str(dept)
+                        processed_revenue[r_name][dept_str] = val
+                        all_depts.add(dept_str)
+
+            # --- Payroll ---
+            df = data_store[r_name]['payroll']
+            if not df.empty:
+                # Need columns: Department, start_punchtime, end_punchtime, rate
+                dept_col = get_col(df, ['Department', 'department', 'Dept', 'dept'])
+                start_col = get_col(df, ['start_punchtime', 'StartPunchTime', 'StartTime'])
+                end_col = get_col(df, ['end_punchtime', 'EndPunchTime', 'EndTime'])
+                rate_col = get_col(df, ['rate', 'Rate', 'HourlyRate'])
+                
+                if dept_col and start_col and end_col and rate_col:
+                    # Vectorized calculation is faster but let's iterate for safety with OT logic
+                    # Group by department first to avoid huge DF operations if needed
+                    # But row-based calc is needed for OT
+                    
+                    # Ensure datetime
+                    df[start_col] = pd.to_datetime(df[start_col], errors='coerce')
+                    df[end_col] = pd.to_datetime(df[end_col], errors='coerce')
+                    df[rate_col] = pd.to_numeric(df[rate_col], errors='coerce').fillna(0)
+                    
+                    # Remove invalid times
+                    valid_rows = df.dropna(subset=[start_col, end_col])
+                    
+                    for _, row in valid_rows.iterrows():
+                        start_t = row[start_col]
+                        end_t = row[end_col]
+                        rate = row[rate_col]
+                        dept = str(row[dept_col])
+                        all_depts.add(dept) # Add to depts if not in revenue
+                        
+                        # Calculate hours
+                        diff = (end_t - start_t).total_seconds() / 3600.0
+                        if diff < 0: diff = 0 # Should not happen but safety
+                        
+                        # OT Logic
+                        # <= 8 hrs: hours * rate
+                        # > 8 hrs: (8 * rate) + ((hours - 8) * rate * 1.5)
+                        if diff <= 8:
+                            wages = diff * rate
+                        else:
+                            wages = (8 * rate) + ((diff - 8) * rate * 1.5)
+                            
+                        processed_payroll[r_name][dept] = processed_payroll[r_name].get(dept, 0) + wages
+
+
+        # 4. Write to Excel
+        filename = f"{resort_name}_Report_{self.timestamp}.xlsx"
         filepath = os.path.join(self.output_dir, filename)
         
-        # Save to CSV
-        df.to_csv(filepath, index=False)
-        print(f"   ✓ Saved: {filepath}")
+        workbook = xlsxwriter.Workbook(filepath)
+        worksheet = workbook.add_worksheet("Report")
         
-        return filepath
-    
-    def generate_all_reports(self, resort: str, database: str = None, 
-                            group_no: int = -1, days_back: int = 30) -> List[str]:
-        """
-        Generate all reports for a resort
+        # Formats
+        header_fmt = workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#D3D3D3', 'border': 1, 'text_wrap': True})
+        row_header_fmt = workbook.add_format({'bold': True, 'border': 1})
+        data_fmt = workbook.add_format({'border': 1, 'num_format': '#,##0.00'})
+        snow_fmt = workbook.add_format({'border': 1, 'num_format': '0.0'})
         
-        Args:
-            resort: Resort name (e.g., 'Purgatory', 'Snowbowl')
-            database: Database name (defaults to resort name)
-            group_no: Group number for the resort (-1 for all groups)
-            days_back: Number of days to look back from today
+        # Write Column Headers
+        worksheet.write(0, 0, "Category / Date Range", header_fmt)
+        
+        for i, r_name in enumerate(range_names):
+            start, end = ranges[r_name]
+            header_text = f"{r_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+            worksheet.write(0, i + 1, header_text, header_fmt)
+            worksheet.set_column(i + 1, i + 1, 18) # Set width
+
+        worksheet.set_column(0, 0, 30) # Set Row Header width
+        current_row = 1
+        
+        # --- Snow Section ---
+        worksheet.write(current_row, 0, "Snow 24hrs", row_header_fmt)
+        for i, r_name in enumerate(range_names):
+            worksheet.write(current_row, i + 1, processed_snow[r_name]['snow_24hrs'], snow_fmt)
+        current_row += 1
+        
+        worksheet.write(current_row, 0, "Base Depth", row_header_fmt)
+        for i, r_name in enumerate(range_names):
+            worksheet.write(current_row, i + 1, processed_snow[r_name]['base_depth'], snow_fmt)
+        current_row += 2 # Spacer
+        
+        # --- Visits Section ---
+        worksheet.write(current_row, 0, "VISITS", header_fmt)
+        current_row += 1
+        
+        sorted_locs = sorted(list(all_locations))
+        
+        for loc in sorted_locs:
+            worksheet.write(current_row, 0, loc, row_header_fmt)
+            for i, r_name in enumerate(range_names):
+                val = processed_visits[r_name].get(loc, 0)
+                worksheet.write(current_row, i + 1, val, data_fmt)
+            current_row += 1
             
-        Returns:
-            List of saved file paths
-        """
-        if database is None:
-            database = resort
+        # Total Visits
+        worksheet.write(current_row, 0, "Total Tickets", header_fmt)
+        for i, r_name in enumerate(range_names):
+            total = sum(processed_visits[r_name].values())
+            worksheet.write(current_row, i + 1, total, data_fmt)
+        current_row += 2
         
-        # Calculate date range
-        date_end = datetime.now()
-        date_ini = date_end - timedelta(days=days_back)
+        # --- Financials Section ---
+        worksheet.write(current_row, 0, "FINANCIALS", header_fmt)
+        current_row += 1
         
-        print(f"\n{'='*70}")
-        print(f"  MCP Database Report Generator")
-        print(f"  Mountain Capital Partners")
-        print(f"{'='*70}")
-        print(f"\n🏔️  Resort: {resort}")
-        print(f"📅 Date Range: {date_ini.strftime('%Y-%m-%d')} to {date_end.strftime('%Y-%m-%d')}")
-        print(f"📁 Output Directory: {self.output_dir}")
-        print(f"{'='*70}")
+        sorted_depts = sorted(list(all_depts))
         
-        saved_files = []
+        for dept in sorted_depts:
+            # Revenue Row
+            worksheet.write(current_row, 0, f"{dept}", row_header_fmt)
+            for i, r_name in enumerate(range_names):
+                val = processed_revenue[r_name].get(dept, 0)
+                worksheet.write(current_row, i + 1, val, data_fmt)
+            current_row += 1
+            
+            # Payroll Row (only if payroll exists for this dept? User says: "If we have the matching dept in the payroll then we will display it.")
+            # But also says: "right below this will be the matching payroll... display it."
+            # If no payroll for dept ever, maybe skip payroll row? Or show 0?
+            # "If we have the matching dept... then we will display it" implies conditional.
+            # Check if any payroll exists for this dept across any range.
+            
+            has_payroll = any(dept in processed_payroll[r] for r in range_names)
+            
+            if has_payroll:
+                worksheet.write(current_row, 0, f"{dept} - Payroll", row_header_fmt)
+                for i, r_name in enumerate(range_names):
+                    val = processed_payroll[r_name].get(dept, 0)
+                    worksheet.write(current_row, i + 1, val, data_fmt)
+                current_row += 1
         
-        try:
-            with DatabaseConnection() as conn:
-                print("\n✓ Database connection established")
-                
-                # Generate Revenue Report
-                try:
-                    revenue_df = self.generate_revenue_report(
-                        conn, database, group_no, date_ini, date_end
-                    )
-                    file_path = self.save_report(revenue_df, "revenue", resort)
-                    if file_path:
-                        saved_files.append(file_path)
-                except Exception as e:
-                    print(f"   ✗ Error generating revenue report: {e}")
-                
-                # Generate Payroll Report
-                try:
-                    payroll_df = self.generate_payroll_report(
-                        conn, resort, date_ini, date_end
-                    )
-                    file_path = self.save_report(payroll_df, "payroll", resort)
-                    if file_path:
-                        saved_files.append(file_path)
-                except Exception as e:
-                    print(f"   ✗ Error generating payroll report: {e}")
-                
-                # Generate Visits Report
-                try:
-                    visits_df = self.generate_visits_report(
-                        conn, resort, date_ini, date_end
-                    ) 
-                    file_path = self.save_report(visits_df, "visits", resort)
-                    if file_path:
-                        saved_files.append(file_path)
-                except Exception as e:
-                    print(f"   ✗ Error generating visits report: {e}")
-                
-                # Generate Weather Report
-                try:
-                    weather_df = self.generate_weather_report(
-                        conn, resort, date_ini, date_end
-                    )
-                    file_path = self.save_report(weather_df, "weather", resort)
-                    if file_path:
-                        saved_files.append(file_path)
-                except Exception as e:
-                    print(f"   ✗ Error generating weather report: {e}")
-                
-        except Exception as e:
-            print(f"\n✗ Database connection error: {e}")
-            return saved_files
+        # Totals
+        current_row += 1
+        worksheet.write(current_row, 0, "Total Revenue", header_fmt)
+        for i, r_name in enumerate(range_names):
+            total = sum(processed_revenue[r_name].values())
+            worksheet.write(current_row, i + 1, total, data_fmt)
+        current_row += 1
         
-        # Summary
-        print(f"\n{'='*70}")
-        print(f"  Report Generation Complete")
-        print(f"{'='*70}")
-        print(f"\n✓ Generated {len(saved_files)} report(s)")
-        
-        if saved_files:
-            print("\n📄 Saved Files:")
-            for file_path in saved_files:
-                print(f"   • {file_path}")
-        
-        return saved_files
+        worksheet.write(current_row, 0, "Total Payroll", header_fmt)
+        for i, r_name in enumerate(range_names):
+            total = sum(processed_payroll[r_name].values())
+            worksheet.write(current_row, i + 1, total, data_fmt)
+            
+        workbook.close()
+        print(f"✓ Report saved: {filepath}")
+        return filepath
 
