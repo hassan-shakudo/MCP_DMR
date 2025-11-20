@@ -93,6 +93,7 @@ class ReportGenerator:
         # 3. Process Data and Collect Row Headers
         all_locations = set()
         all_depts = set()
+        dept_code_to_title = {}  # Map department codes to titles
         
         # Processed data structure: category -> range -> key -> value
         processed_snow = {r: {'snow_24hrs': 0.0, 'base_depth': 0.0} for r in range_names}
@@ -153,8 +154,16 @@ class ReportGenerator:
             # --- Revenue ---
             df = data_store[r_name]['revenue']
             if not df.empty:
-                dept_col = get_col(df, ['DepartmentTitle', 'Department', 'department_title'])
+                # Find department code and title columns
+                dept_code_col = get_col(df, ['Department', 'department', 'DepartmentCode', 'department_code'])
+                dept_title_col = get_col(df, ['DepartmentTitle', 'department_title', 'DeptTitle', 'dept_title'])
                 rev_col = get_col(df, ['Revenue', 'revenue', 'Amount', 'amount']) # Guessing
+                
+                # If we can't find both dept columns, try using any dept-like column
+                if not dept_code_col:
+                    dept_code_col = dept_title_col
+                if not dept_title_col:
+                    dept_title_col = dept_code_col
                 
                 # Find likely revenue column if not explicit
                 if not rev_col:
@@ -163,12 +172,23 @@ class ReportGenerator:
                      if len(numerics) > 0:
                          rev_col = numerics[-1]
 
-                if dept_col and rev_col:
-                    grouped = df.groupby(dept_col)[rev_col].sum()
+                if dept_code_col and rev_col:
+                    # Build mapping from code to title
+                    if dept_title_col and dept_title_col != dept_code_col:
+                        for _, row in df.iterrows():
+                            code = str(row[dept_code_col])
+                            title = str(row[dept_title_col])
+                            if code not in dept_code_to_title:
+                                dept_code_to_title[code] = title
+                    
+                    grouped = df.groupby(dept_code_col)[rev_col].sum()
                     for dept, val in grouped.items():
                         dept_str = str(dept)
                         processed_revenue[r_name][dept_str] = val
                         all_depts.add(dept_str)
+                        # If no title mapping yet, use the code as title
+                        if dept_str not in dept_code_to_title:
+                            dept_code_to_title[dept_str] = dept_str
 
             # --- Payroll ---
             df = data_store[r_name]['payroll']
@@ -227,9 +247,19 @@ class ReportGenerator:
         data_fmt = workbook.add_format({'border': 1, 'num_format': '#,##0.00'})
         snow_fmt = workbook.add_format({'border': 1, 'num_format': '0.0'})
         
-        # Write Column Headers
-        worksheet.write(0, 0, "Category / Date Range", header_fmt)
+        # Create top-left cell with resort info and "For the day Actual" date
+        day_actual_start, day_actual_end = ranges["For The Day (Actual)"]
+        day_name = day_actual_start.strftime('%A')  # e.g., "Wednesday"
+        day_date = day_actual_start.strftime('%d %B, %Y')  # e.g., "19 November, 2025"
         
+        # Format: remove leading zero from day if present
+        if day_date.startswith('0'):
+            day_date = day_date[1:]
+        
+        top_left_text = f"{resort_name} Resort\nDaily Management Report\nAs of {day_name} - {day_date}"
+        worksheet.write(0, 0, top_left_text, header_fmt)
+        
+        # Write Column Headers
         for i, r_name in enumerate(range_names):
             start, end = ranges[r_name]
             header_text = f"{r_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
@@ -237,6 +267,10 @@ class ReportGenerator:
             worksheet.set_column(i + 1, i + 1, 18) # Set width
 
         worksheet.set_column(0, 0, 30) # Set Row Header width
+        
+        # Freeze first row and first column
+        worksheet.freeze_panes(1, 1)
+        
         current_row = 1
         
         # --- Snow Section ---
@@ -277,8 +311,11 @@ class ReportGenerator:
         sorted_depts = sorted(list(all_depts))
         
         for dept in sorted_depts:
+            # Get department title for display (use code as fallback)
+            dept_title = dept_code_to_title.get(dept, dept)
+            
             # Revenue Row
-            worksheet.write(current_row, 0, f"{dept}", row_header_fmt)
+            worksheet.write(current_row, 0, f"{dept_title} - Revenue", row_header_fmt)
             for i, r_name in enumerate(range_names):
                 val = processed_revenue[r_name].get(dept, 0)
                 worksheet.write(current_row, i + 1, val, data_fmt)
@@ -293,7 +330,7 @@ class ReportGenerator:
             has_payroll = any(dept in processed_payroll[r] for r in range_names)
             
             if has_payroll:
-                worksheet.write(current_row, 0, f"{dept} - Payroll", row_header_fmt)
+                worksheet.write(current_row, 0, f"{dept_title} - Payroll", row_header_fmt)
                 for i, r_name in enumerate(range_names):
                     val = processed_payroll[r_name].get(dept, 0)
                     worksheet.write(current_row, i + 1, val, data_fmt)
