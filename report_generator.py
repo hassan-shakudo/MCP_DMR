@@ -61,6 +61,7 @@ class ReportGenerator:
         range_names = [
             "For The Day (Actual)", "For The Day (Prior Year)",
             "For The Week Ending (Actual)", "For The Week Ending (Prior Year)",
+            "Month to Date (Actual)", "Month to Date (Prior Year)",
             "For Winter Ending (Actual)", "For Winter Ending (Prior Year)"
         ]
         
@@ -334,6 +335,21 @@ class ReportGenerator:
                 for i, r_name in enumerate(range_names):
                     val = processed_payroll[r_name].get(dept, 0)
                     worksheet.write(current_row, i + 1, val, data_fmt)
+                current_row += 1
+                
+                # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
+                worksheet.write(current_row, 0, f"PR % of {dept_title}", row_header_fmt)
+                percent_fmt = workbook.add_format({'border': 1, 'num_format': '0.00'})
+                for i, r_name in enumerate(range_names):
+                    revenue = abs(processed_revenue[r_name].get(dept, 0))
+                    payroll = abs(processed_payroll[r_name].get(dept, 0))
+                    
+                    if payroll != 0:
+                        percentage = (revenue / payroll) * 100
+                    else:
+                        percentage = 0  # Avoid division by zero
+                    
+                    worksheet.write(current_row, i + 1, percentage, percent_fmt)
                 current_row += 1
         
         # Totals

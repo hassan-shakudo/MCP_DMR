@@ -38,12 +38,14 @@ class DateRangeCalculator:
         self.base_date = self.base_date.replace(hour=23, minute=59, second=59, microsecond=999999)
         
     def get_all_ranges(self) -> Dict[str, Tuple[datetime, datetime]]:
-        """Get all 6 required date ranges"""
+        """Get all 8 required date ranges"""
         return {
             "For The Day (Actual)": self.for_the_day_actual(),
             "For The Day (Prior Year)": self.for_the_day_prior_year(),
             "For The Week Ending (Actual)": self.week_ending_actual(),
             "For The Week Ending (Prior Year)": self.week_ending_prior_year(),
+            "Month to Date (Actual)": self.month_to_date_actual(),
+            "Month to Date (Prior Year)": self.month_to_date_prior_year(),
             "For Winter Ending (Actual)": self.winter_ending_actual(),
             "For Winter Ending (Prior Year)": self.winter_ending_prior_year()
         }
@@ -79,6 +81,27 @@ class DateRangeCalculator:
         days_since_monday = prior_end_date.weekday()
         start = (prior_end_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
         return start, prior_end_date
+
+    def month_to_date_actual(self) -> Tuple[datetime, datetime]:
+        """First day of current month to For The Day"""
+        # Get the first day of the current month
+        start = self.base_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = self.base_date
+        return start, end
+
+    def month_to_date_prior_year(self) -> Tuple[datetime, datetime]:
+        """First day of same month prior year to same date prior year"""
+        # Calculate prior year date (same month, same day, previous year)
+        prior_year = self.base_date.year - 1
+        try:
+            prior_end_date = self.base_date.replace(year=prior_year)
+        except ValueError:  # Feb 29 on non-leap year
+            prior_end_date = self.base_date.replace(year=prior_year, day=28)
+        
+        # First day of that month
+        start = prior_end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = prior_end_date
+        return start, end
 
     def winter_ending_actual(self) -> Tuple[datetime, datetime]:
         """Nov 1 of current season to For The Day"""
