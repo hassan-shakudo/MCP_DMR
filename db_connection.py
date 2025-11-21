@@ -99,6 +99,6 @@ def create_connection(username: Optional[str] = None,
     if database_name:
         config.database_name = database_name
     
-    db = DatabaseConnection(config)
-    return db.connect()
+    database_connection = DatabaseConnection(config)
+    return database_connection.connect()
 

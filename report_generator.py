@@ -69,44 +69,44 @@ class ReportGenerator:
         data_store = {name: {} for name in range_names}
         
         with DatabaseConnection() as conn:
-            sp = StoredProcedures(conn)
+            stored_procedures = StoredProcedures(conn)
             
-            for r_name in range_names:
-                start, end = ranges[r_name]
-                print(f"   ⏳ Fetching data for {r_name} ({start.date()} - {end.date()})...")
+            for range_name in range_names:
+                start, end = ranges[range_name]
+                print(f"   ⏳ Fetching data for {range_name} ({start.date()} - {end.date()})...")
                 
                 # Revenue
-                rev_df = sp.execute_revenue(db_name, group_num, start, end)
-                data_store[r_name]['revenue'] = rev_df
+                revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
+                data_store[range_name]['revenue'] = revenue_dataframe
                 
                 # Payroll
-                pay_df = sp.execute_payroll(resort_name, start, end)
-                data_store[r_name]['payroll'] = pay_df
+                payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
+                data_store[range_name]['payroll'] = payroll_dataframe
                 
                 # Visits
-                vis_df = sp.execute_visits(resort_name, start, end)
-                data_store[r_name]['visits'] = vis_df
+                visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
+                data_store[range_name]['visits'] = visits_dataframe
                 
                 # Weather/Snow
-                snow_df = sp.execute_weather(resort_name, start, end)
-                data_store[r_name]['snow'] = snow_df
+                snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
+                data_store[range_name]['snow'] = snow_dataframe
 
         # 3. Process Data and Collect Row Headers
         all_locations = set()
-        all_depts = set()
-        dept_code_to_title = {}  # Map department codes to titles
+        all_departments = set()
+        department_code_to_title = {}  # Map department codes to titles
         
         # Processed data structure: category -> range -> key -> value
-        processed_snow = {r: {'snow_24hrs': 0.0, 'base_depth': 0.0} for r in range_names}
-        processed_visits = {r: {} for r in range_names} # loc -> sum
-        processed_revenue = {r: {} for r in range_names} # dept -> sum
-        processed_payroll = {r: {} for r in range_names} # dept -> sum
+        processed_snow = {range_name: {'snow_24hrs': 0.0, 'base_depth': 0.0} for range_name in range_names}
+        processed_visits = {range_name: {} for range_name in range_names} # location -> sum
+        processed_revenue = {range_name: {} for range_name in range_names} # department -> sum
+        processed_payroll = {range_name: {} for range_name in range_names} # department -> sum
         
         # Helper to guess column names if they vary
-        def get_col(df, candidates):
-            for c in candidates:
-                if c in df.columns:
-                    return c
+        def get_col(dataframe, candidates):
+            for candidate_column in candidates:
+                if candidate_column in dataframe.columns:
+                    return candidate_column
             return None
         
         # Helper to safely convert numeric values (handles Decimal, None, etc.)
@@ -118,130 +118,130 @@ class ReportGenerator:
             except (TypeError, ValueError):
                 return 0.0
 
-        for r_name in range_names:
+        for range_name in range_names:
             # --- Snow ---
-            df = data_store[r_name]['snow']
-            if not df.empty:
+            snow_dataframe = data_store[range_name]['snow']
+            if not snow_dataframe.empty:
                 # Sum snow_24hrs
-                snow_col = get_col(df, ['snow_24hrs', 'Snow24Hrs', 'Snow_24hrs'])
-                base_col = get_col(df, ['base_depth', 'BaseDepth', 'Base_Depth'])
+                snow_column = get_col(snow_dataframe, ['snow_24hrs', 'Snow24Hrs', 'Snow_24hrs'])
+                base_column = get_col(snow_dataframe, ['base_depth', 'BaseDepth', 'Base_Depth'])
                 
-                if snow_col:
-                    processed_snow[r_name]['snow_24hrs'] = df[snow_col].sum()
-                if base_col:
-                    processed_snow[r_name]['base_depth'] = df[base_col].sum() # Instruction: "sum up"
+                if snow_column:
+                    processed_snow[range_name]['snow_24hrs'] = snow_dataframe[snow_column].sum()
+                if base_column:
+                    processed_snow[range_name]['base_depth'] = snow_dataframe[base_column].sum() # Instruction: "sum up"
 
             # --- Visits ---
-            df = data_store[r_name]['visits']
-            if not df.empty:
-                loc_col = get_col(df, ['Location', 'location', 'Resort', 'resort'])
-                val_col = get_col(df, ['Visits', 'visits', 'Count', 'count']) # Guessing value column
+            visits_dataframe = data_store[range_name]['visits']
+            if not visits_dataframe.empty:
+                location_column = get_col(visits_dataframe, ['Location', 'location', 'Resort', 'resort'])
+                value_column = get_col(visits_dataframe, ['Visits', 'visits', 'Count', 'count']) # Guessing value column
                 
                 # If no explicit value column, maybe count rows? 
                 # User said "sum up the visits". 
                 # If DataFrame has one row per visit, we count. If it has aggregated 'Visits' col, we sum.
                 # Assuming 'Visits' column exists or we sum rows if no obvious numeric column found?
                 # Let's look for numeric columns.
-                if not val_col:
+                if not value_column:
                     # Fallback: look for any numeric column that isn't an ID
-                    numerics = df.select_dtypes(include=['number']).columns
-                    if len(numerics) > 0:
-                        val_col = numerics[-1] # Pick last numeric? risky.
+                    numeric_columns = visits_dataframe.select_dtypes(include=['number']).columns
+                    if len(numeric_columns) > 0:
+                        value_column = numeric_columns[-1] # Pick last numeric? risky.
                 
-                if loc_col:
+                if location_column:
                     # Group and sum
-                    if val_col:
-                        grouped = df.groupby(loc_col)[val_col].sum()
+                    if value_column:
+                        grouped = visits_dataframe.groupby(location_column)[value_column].sum()
                     else:
                         # Count rows per location
-                        grouped = df.groupby(loc_col).size()
+                        grouped = visits_dataframe.groupby(location_column).size()
                         
-                    for loc, val in grouped.items():
-                        loc_str = str(loc)
-                        processed_visits[r_name][loc_str] = val
-                        all_locations.add(loc_str)
+                    for location, value in grouped.items():
+                        location_string = str(location)
+                        processed_visits[range_name][location_string] = value
+                        all_locations.add(location_string)
 
             # --- Revenue ---
-            df = data_store[r_name]['revenue']
-            if not df.empty:
+            revenue_dataframe = data_store[range_name]['revenue']
+            if not revenue_dataframe.empty:
                 # Find department code and title columns
-                dept_code_col = get_col(df, ['Department', 'department', 'DepartmentCode', 'department_code'])
-                dept_title_col = get_col(df, ['DepartmentTitle', 'department_title', 'DeptTitle', 'dept_title'])
-                rev_col = get_col(df, ['Revenue', 'revenue', 'Amount', 'amount']) # Guessing
+                department_code_column = get_col(revenue_dataframe, ['Department', 'department', 'DepartmentCode', 'department_code'])
+                department_title_column = get_col(revenue_dataframe, ['DepartmentTitle', 'department_title', 'DeptTitle', 'dept_title'])
+                revenue_column = get_col(revenue_dataframe, ['Revenue', 'revenue', 'Amount', 'amount']) # Guessing
                 
-                # If we can't find both dept columns, try using any dept-like column
-                if not dept_code_col:
-                    dept_code_col = dept_title_col
-                if not dept_title_col:
-                    dept_title_col = dept_code_col
+                # If we can't find both department columns, try using any department-like column
+                if not department_code_column:
+                    department_code_column = department_title_column
+                if not department_title_column:
+                    department_title_column = department_code_column
                 
                 # Find likely revenue column if not explicit
-                if not rev_col:
-                     numerics = df.select_dtypes(include=['number']).columns
+                if not revenue_column:
+                     numeric_columns = revenue_dataframe.select_dtypes(include=['number']).columns
                      # Usually the last numeric column is the amount
-                     if len(numerics) > 0:
-                         rev_col = numerics[-1]
+                     if len(numeric_columns) > 0:
+                         revenue_column = numeric_columns[-1]
 
-                if dept_code_col and rev_col:
+                if department_code_column and revenue_column:
                     # Build mapping from code to title
-                    if dept_title_col and dept_title_col != dept_code_col:
-                        for _, row in df.iterrows():
-                            code = str(row[dept_code_col])
-                            title = str(row[dept_title_col])
-                            if code not in dept_code_to_title:
-                                dept_code_to_title[code] = title
+                    if department_title_column and department_title_column != department_code_column:
+                        for _, row in revenue_dataframe.iterrows():
+                            code = str(row[department_code_column])
+                            title = str(row[department_title_column])
+                            if code not in department_code_to_title:
+                                department_code_to_title[code] = title
                     
-                    grouped = df.groupby(dept_code_col)[rev_col].sum()
-                    for dept, val in grouped.items():
-                        dept_str = str(dept)
-                        processed_revenue[r_name][dept_str] = val
-                        all_depts.add(dept_str)
+                    grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
+                    for department, value in grouped.items():
+                        department_string = str(department)
+                        processed_revenue[range_name][department_string] = value
+                        all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
-                        if dept_str not in dept_code_to_title:
-                            dept_code_to_title[dept_str] = dept_str
+                        if department_string not in department_code_to_title:
+                            department_code_to_title[department_string] = department_string
 
             # --- Payroll ---
-            df = data_store[r_name]['payroll']
-            if not df.empty:
+            payroll_dataframe = data_store[range_name]['payroll']
+            if not payroll_dataframe.empty:
                 # Need columns: Department, start_punchtime, end_punchtime, rate
-                dept_col = get_col(df, ['Department', 'department', 'Dept', 'dept'])
-                start_col = get_col(df, ['start_punchtime', 'StartPunchTime', 'StartTime'])
-                end_col = get_col(df, ['end_punchtime', 'EndPunchTime', 'EndTime'])
-                rate_col = get_col(df, ['rate', 'Rate', 'HourlyRate'])
+                department_column = get_col(payroll_dataframe, ['Department', 'department', 'Dept', 'dept'])
+                start_column = get_col(payroll_dataframe, ['start_punchtime', 'StartPunchTime', 'StartTime'])
+                end_column = get_col(payroll_dataframe, ['end_punchtime', 'EndPunchTime', 'EndTime'])
+                rate_column = get_col(payroll_dataframe, ['rate', 'Rate', 'HourlyRate'])
                 
-                if dept_col and start_col and end_col and rate_col:
+                if department_column and start_column and end_column and rate_column:
                     # Vectorized calculation is faster but let's iterate for safety with OT logic
-                    # Group by department first to avoid huge DF operations if needed
+                    # Group by department first to avoid huge DataFrame operations if needed
                     # But row-based calc is needed for OT
                     
                     # Ensure datetime
-                    df[start_col] = pd.to_datetime(df[start_col], errors='coerce')
-                    df[end_col] = pd.to_datetime(df[end_col], errors='coerce')
-                    df[rate_col] = pd.to_numeric(df[rate_col], errors='coerce').fillna(0)
+                    payroll_dataframe[start_column] = pd.to_datetime(payroll_dataframe[start_column], errors='coerce')
+                    payroll_dataframe[end_column] = pd.to_datetime(payroll_dataframe[end_column], errors='coerce')
+                    payroll_dataframe[rate_column] = pd.to_numeric(payroll_dataframe[rate_column], errors='coerce').fillna(0)
                     
                     # Remove invalid times
-                    valid_rows = df.dropna(subset=[start_col, end_col])
+                    valid_rows = payroll_dataframe.dropna(subset=[start_column, end_column])
                     
                     for _, row in valid_rows.iterrows():
-                        start_t = row[start_col]
-                        end_t = row[end_col]
-                        rate = row[rate_col]
-                        dept = str(row[dept_col])
-                        all_depts.add(dept) # Add to depts if not in revenue
+                        start_time = row[start_column]
+                        end_time = row[end_column]
+                        rate = row[rate_column]
+                        department = str(row[department_column])
+                        all_departments.add(department) # Add to departments if not in revenue
                         
                         # Calculate hours
-                        diff = (end_t - start_t).total_seconds() / 3600.0
-                        if diff < 0: diff = 0 # Should not happen but safety
+                        hours_worked = (end_time - start_time).total_seconds() / 3600.0
+                        if hours_worked < 0: hours_worked = 0 # Should not happen but safety
                         
                         # OT Logic
                         # <= 8 hrs: hours * rate
                         # > 8 hrs: (8 * rate) + ((hours - 8) * rate * 1.5)
-                        if diff <= 8:
-                            wages = diff * rate
+                        if hours_worked <= 8:
+                            wages = hours_worked * rate
                         else:
-                            wages = (8 * rate) + ((diff - 8) * rate * 1.5)
+                            wages = (8 * rate) + ((hours_worked - 8) * rate * 1.5)
                             
-                        processed_payroll[r_name][dept] = processed_payroll[r_name].get(dept, 0) + wages
+                        processed_payroll[range_name][department] = processed_payroll[range_name].get(department, 0) + wages
 
 
         # 4. Write to Excel
@@ -271,11 +271,11 @@ class ReportGenerator:
         worksheet.write(0, 0, top_left_text, header_fmt)
         
         # Write Column Headers
-        for i, r_name in enumerate(range_names):
-            start, end = ranges[r_name]
-            header_text = f"{r_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
-            worksheet.write(0, i + 1, header_text, header_fmt)
-            worksheet.set_column(i + 1, i + 1, 18) # Set width
+        for column_index, range_name in enumerate(range_names):
+            start, end = ranges[range_name]
+            header_text = f"{range_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+            worksheet.write(0, column_index + 1, header_text, header_fmt)
+            worksheet.set_column(column_index + 1, column_index + 1, 18) # Set width
 
         worksheet.set_column(0, 0, 30) # Set Row Header width
         
@@ -286,72 +286,72 @@ class ReportGenerator:
         
         # --- Snow Section ---
         worksheet.write(current_row, 0, "Snow 24hrs", row_header_fmt)
-        for i, r_name in enumerate(range_names):
-            worksheet.write(current_row, i + 1, processed_snow[r_name]['snow_24hrs'], snow_fmt)
+        for column_index, range_name in enumerate(range_names):
+            worksheet.write(current_row, column_index + 1, processed_snow[range_name]['snow_24hrs'], snow_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Base Depth", row_header_fmt)
-        for i, r_name in enumerate(range_names):
-            worksheet.write(current_row, i + 1, processed_snow[r_name]['base_depth'], snow_fmt)
+        for column_index, range_name in enumerate(range_names):
+            worksheet.write(current_row, column_index + 1, processed_snow[range_name]['base_depth'], snow_fmt)
         current_row += 2 # Spacer
         
         # --- Visits Section ---
         worksheet.write(current_row, 0, "VISITS", header_fmt)
         current_row += 1
         
-        sorted_locs = sorted(list(all_locations))
+        sorted_locations = sorted(list(all_locations))
         
-        for loc in sorted_locs:
-            worksheet.write(current_row, 0, loc, row_header_fmt)
-            for i, r_name in enumerate(range_names):
-                val = processed_visits[r_name].get(loc, 0)
-                worksheet.write(current_row, i + 1, val, data_fmt)
+        for location in sorted_locations:
+            worksheet.write(current_row, 0, location, row_header_fmt)
+            for column_index, range_name in enumerate(range_names):
+                value = processed_visits[range_name].get(location, 0)
+                worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
         # Total Visits
         worksheet.write(current_row, 0, "Total Tickets", header_fmt)
-        for i, r_name in enumerate(range_names):
-            total = sum(processed_visits[r_name].values())
-            worksheet.write(current_row, i + 1, total, data_fmt)
+        for column_index, range_name in enumerate(range_names):
+            total = sum(processed_visits[range_name].values())
+            worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 2
         
         # --- Financials Section ---
         worksheet.write(current_row, 0, "FINANCIALS", header_fmt)
         current_row += 1
         
-        sorted_depts = sorted(list(all_depts))
+        sorted_departments = sorted(list(all_departments))
         
-        for dept in sorted_depts:
+        for department in sorted_departments:
             # Get department title for display (use code as fallback)
-            dept_title = dept_code_to_title.get(dept, dept)
+            department_title = department_code_to_title.get(department, department)
             
             # Revenue Row
-            worksheet.write(current_row, 0, f"{dept_title} - Revenue", row_header_fmt)
-            for i, r_name in enumerate(range_names):
-                val = processed_revenue[r_name].get(dept, 0)
-                worksheet.write(current_row, i + 1, val, data_fmt)
+            worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
+            for column_index, range_name in enumerate(range_names):
+                value = processed_revenue[range_name].get(department, 0)
+                worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
-            # Payroll Row (only if payroll exists for this dept? User says: "If we have the matching dept in the payroll then we will display it.")
+            # Payroll Row (only if payroll exists for this department? User says: "If we have the matching department in the payroll then we will display it.")
             # But also says: "right below this will be the matching payroll... display it."
-            # If no payroll for dept ever, maybe skip payroll row? Or show 0?
-            # "If we have the matching dept... then we will display it" implies conditional.
-            # Check if any payroll exists for this dept across any range.
+            # If no payroll for department ever, maybe skip payroll row? Or show 0?
+            # "If we have the matching department... then we will display it" implies conditional.
+            # Check if any payroll exists for this department across any range.
             
-            has_payroll = any(dept in processed_payroll[r] for r in range_names)
+            has_payroll = any(department in processed_payroll[range_name] for range_name in range_names)
             
             if has_payroll:
-                worksheet.write(current_row, 0, f"{dept_title} - Payroll", row_header_fmt)
-                for i, r_name in enumerate(range_names):
-                    val = processed_payroll[r_name].get(dept, 0)
-                    worksheet.write(current_row, i + 1, val, data_fmt)
+                worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
+                for column_index, range_name in enumerate(range_names):
+                    value = processed_payroll[range_name].get(department, 0)
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
                 current_row += 1
                 
                 # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
-                worksheet.write(current_row, 0, f"PR % of {dept_title}", row_header_fmt)
-                for i, r_name in enumerate(range_names):
-                    revenue = abs(normalize_value(processed_revenue[r_name].get(dept, 0)))
-                    payroll = abs(normalize_value(processed_payroll[r_name].get(dept, 0)))
+                worksheet.write(current_row, 0, f"PR % of {department_title}", row_header_fmt)
+                for column_index, range_name in enumerate(range_names):
+                    revenue = abs(normalize_value(processed_revenue[range_name].get(department, 0)))
+                    payroll = abs(normalize_value(processed_payroll[range_name].get(department, 0)))
                     
                     # If either revenue or payroll is 0, show 0%
                     if revenue == 0 or payroll == 0:
@@ -359,21 +359,21 @@ class ReportGenerator:
                     else:
                         percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
                     
-                    worksheet.write(current_row, i + 1, percentage, percent_fmt)
+                    worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
                 current_row += 1
         
         # Totals
         current_row += 1
         worksheet.write(current_row, 0, "Total Revenue", header_fmt)
-        for i, r_name in enumerate(range_names):
-            total = sum(processed_revenue[r_name].values())
-            worksheet.write(current_row, i + 1, total, data_fmt)
+        for column_index, range_name in enumerate(range_names):
+            total = sum(processed_revenue[range_name].values())
+            worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Total Payroll", header_fmt)
-        for i, r_name in enumerate(range_names):
-            total = sum(processed_payroll[r_name].values())
-            worksheet.write(current_row, i + 1, total, data_fmt)
+        for column_index, range_name in enumerate(range_names):
+            total = sum(processed_payroll[range_name].values())
+            worksheet.write(current_row, column_index + 1, total, data_fmt)
             
         workbook.close()
         print(f"✓ Report saved: {filepath}")

@@ -23,7 +23,7 @@ def pyodbc_rows_to_dataframe(cursor: pyodbc.Cursor) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     
-    columns = [col[0] for col in cursor.description]
+    columns = [column_info[0] for column_info in cursor.description]
     data = [tuple(row) for row in rows]  # Critical conversion
     return pd.DataFrame(data, columns=columns)
 

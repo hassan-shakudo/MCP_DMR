@@ -170,8 +170,8 @@ def execute_revenue_proc(conn: pyodbc.Connection,
     Returns:
         Revenue data as DataFrame
     """
-    sp = StoredProcedures(conn)
-    return sp.execute_revenue(database, group_no, date_ini, date_end)
+    stored_procedures = StoredProcedures(conn)
+    return stored_procedures.execute_revenue(database, group_no, date_ini, date_end)
 
 
 def execute_payroll_proc(conn: pyodbc.Connection,
@@ -190,8 +190,8 @@ def execute_payroll_proc(conn: pyodbc.Connection,
     Returns:
         Payroll data as DataFrame
     """
-    sp = StoredProcedures(conn)
-    return sp.execute_payroll(resort, date_ini, date_end)
+    stored_procedures = StoredProcedures(conn)
+    return stored_procedures.execute_payroll(resort, date_ini, date_end)
 
 
 def execute_visits_proc(conn: pyodbc.Connection,
@@ -210,8 +210,8 @@ def execute_visits_proc(conn: pyodbc.Connection,
     Returns:
         Visit data as DataFrame
     """
-    sp = StoredProcedures(conn)
-    return sp.execute_visits(resort, date_ini, date_end)
+    stored_procedures = StoredProcedures(conn)
+    return stored_procedures.execute_visits(resort, date_ini, date_end)
 
 
 def execute_weather_proc(conn: pyodbc.Connection,
@@ -230,6 +230,6 @@ def execute_weather_proc(conn: pyodbc.Connection,
     Returns:
         Weather data as DataFrame
     """
-    sp = StoredProcedures(conn)
-    return sp.execute_weather(resort, date_ini, date_end)
+    stored_procedures = StoredProcedures(conn)
+    return stored_procedures.execute_weather(resort, date_ini, date_end)
 
