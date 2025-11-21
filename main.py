@@ -3,26 +3,44 @@ MCP Database Report Generator - Main Entry Point
 Mountain Capital Partners - Ski Resort Data Analysis
 """
 
+from datetime import datetime
 from report_generator import ReportGenerator
+from config import ResortConfig
 
 
 def main():
-    """Generate comprehensive reports and save them as CSV files"""
+    """Generate comprehensive reports for all configured resorts"""
     
-    # Configuration - Edit these values as needed
-    RESORT = "Purgatory"           # Resort name
-    DATABASE = "Purgatory"         # Database name (usually same as resort)
-    GROUP_NO = 46                  # Group number (46 for Purgatory, -1 for all)
-    DAYS_BACK = 30                 # Number of days to look back
-    OUTPUT_DIR = "reports"         # Output directory for CSV files
+    # Configuration
+    OUTPUT_DIR = "reports"
     
-    # Generate reports
+    # Initialize generator
     generator = ReportGenerator(OUTPUT_DIR)
-    saved_files = generator.generate_all_reports(
-        resort=RESORT,
-        database=DATABASE,
-        group_no=GROUP_NO,
-        days_back=DAYS_BACK
-    )
     
+    # Get list of resorts to process
+    # You can filter this list if you only want specific resorts
+    resorts = ResortConfig.RESORT_MAPPING
+    
+    saved_files = []
+    
+    print(f"Starting batch report generation for {len(resorts)} resorts...")
+    
+    for resort_config in resorts:
+        try:
+            file_path = generator.generate_comprehensive_report(
+                resort_config=resort_config,
+                run_date=datetime.now()
+            )
+            if file_path:
+                saved_files.append(file_path)
+        except Exception as e:
+            print(f"❌ Failed to generate report for {resort_config.get('resortName')}: {e}")
+            import traceback
+            traceback.print_exc()
+            
+    print(f"\n✨ Generation complete! {len(saved_files)} reports created.")
     return saved_files
+
+
+if __name__ == "__main__":
+    main()

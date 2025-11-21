@@ -40,35 +40,18 @@ class DatabaseConfig:
 
 class ResortConfig:
     """Resort and stored procedure configuration"""
-    
-    # Available resorts
-    RESORTS: List[str] = [
-        'Snowbowl',
-        'Purgatory', 
-        'Brian Head',
-        'Lee Canyon',
-        'Nordic Valley',
-        'Sipapu',
-        'Willamette'
-    ]
-    
-    # Group numbers for Purgatory database
-    PURGATORY_GROUPS: Dict[int, str] = {
-        46: '*PURGATORY',
-        54: '*HESPERUS',
-        59: '*SNOWCAT',
-        67: '*SPIDER MOUNTAIN',
-        70: '*DMMA',
-        71: '*WILLAMETTE'
-    }
-    
-    # Group numbers for MCP database
-    MCP_GROUPS: Dict[int, str] = {
-        9: '** PAJARITO',
-        10: '** SANDIA',
-        12: '** WILLAMETTE',
-        13: '** AZ SNOWBOWL (temporary, only used week of 4th July 2025)'
-    }
+
+    RESORT_MAPPING = [
+    {"dbName": "Purgatory", "resortName": "PURGATORY", "groupNum": 46},
+    {"dbName": "Purgatory", "resortName": "HESPERUS", "groupNum": 54},
+    {"dbName": "Purgatory", "resortName": "SNOWCAT", "groupNum": 59},
+    {"dbName": "Purgatory", "resortName": "SPIDER MOUNTAIN", "groupNum": 67},
+    {"dbName": "Purgatory", "resortName": "DMMA", "groupNum": 70},
+    {"dbName": "Purgatory", "resortName": "WILLAMETTE", "groupNum": 71},
+    {"dbName": "MCP", "resortName": "PAJARITO", "groupNum": 9},
+    {"dbName": "MCP", "resortName": "SANDIA", "groupNum": 10},
+    {"dbName": "MCP", "resortName": "WILLAMETTE", "groupNum": 12},
+]
     
     # Stored procedure names
     STORED_PROCEDURES: Dict[str, str] = {
@@ -77,16 +60,4 @@ class ResortConfig:
         'Visits': 'exec Shakudo_DMRGetVists @resort=?, @date_ini=?, @date_end=?',
         'Weather': 'exec Shakudo_GetSnow @resort=?, @date_ini=?, @date_end=?'
     }
-
-
-class QueryConfig:
-    """Query configuration and thresholds"""
-    
-    # Threshold for determining if a field is a primary key
-    # (percentage of unique values relative to total rows)
-    PRIMARY_KEY_THRESHOLD = 0.98
-    
-    # Revenue query account code range
-    REVENUE_ACCOUNT_MIN = '40000'
-    REVENUE_ACCOUNT_MAX = '49999'
 
