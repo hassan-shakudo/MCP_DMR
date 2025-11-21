@@ -108,6 +108,15 @@ class ReportGenerator:
                 if c in df.columns:
                     return c
             return None
+        
+        # Helper to safely convert numeric values (handles Decimal, None, etc.)
+        def normalize_value(value):
+            if value is None:
+                return 0.0
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
 
         for r_name in range_names:
             # --- Snow ---
@@ -247,6 +256,7 @@ class ReportGenerator:
         row_header_fmt = workbook.add_format({'bold': True, 'border': 1})
         data_fmt = workbook.add_format({'border': 1, 'num_format': '#,##0.00'})
         snow_fmt = workbook.add_format({'border': 1, 'num_format': '0.0'})
+        percent_fmt = workbook.add_format({'border': 1, 'num_format': '0"%"'})
         
         # Create top-left cell with resort info and "For the day Actual" date
         day_actual_start, day_actual_end = ranges["For The Day (Actual)"]
@@ -339,10 +349,9 @@ class ReportGenerator:
                 
                 # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
                 worksheet.write(current_row, 0, f"PR % of {dept_title}", row_header_fmt)
-                percent_fmt = workbook.add_format({'border': 1, 'num_format': '0"%"'})
                 for i, r_name in enumerate(range_names):
-                    revenue = abs(processed_revenue[r_name].get(dept, 0))
-                    payroll = abs(processed_payroll[r_name].get(dept, 0))
+                    revenue = abs(normalize_value(processed_revenue[r_name].get(dept, 0)))
+                    payroll = abs(normalize_value(processed_payroll[r_name].get(dept, 0)))
                     
                     # If either revenue or payroll is 0, show 0%
                     if revenue == 0 or payroll == 0:
