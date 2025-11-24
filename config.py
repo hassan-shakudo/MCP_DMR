@@ -51,6 +51,11 @@ class ResortConfig:
     {"dbName": "MCP", "resortName": "PAJARITO", "groupNum": 9},
     {"dbName": "MCP", "resortName": "SANDIA", "groupNum": 10},
     {"dbName": "MCP", "resortName": "WILLAMETTE", "groupNum": 12},
+    {"dbName": "Snowbowl", "resortName": "Snowbowl", "groupNum": -1},
+    {"dbName": "Lee Canyon", "resortName": "Lee Canyon", "groupNum": -1},
+    {"dbName": "Sipapu", "resortName": "Sipapu", "groupNum": -1},
+    {"dbName": "Nordic", "resortName": "Nordic", "groupNum": -1},
+    {"dbName": "Brian", "resortName": "Brian", "groupNum": -1},
 ]
     
     # Stored procedure names
