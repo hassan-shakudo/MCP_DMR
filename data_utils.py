@@ -38,12 +38,13 @@ class DateRangeCalculator:
         self.base_date = self.base_date.replace(hour=23, minute=59, second=59, microsecond=999999)
         
     def get_all_ranges(self) -> Dict[str, Tuple[datetime, datetime]]:
-        """Get all 8 required date ranges"""
+        """Get all 9 required date ranges"""
         return {
             "For The Day (Actual)": self.for_the_day_actual(),
             "For The Day (Prior Year)": self.for_the_day_prior_year(),
             "For The Week Ending (Actual)": self.week_ending_actual(),
             "For The Week Ending (Prior Year)": self.week_ending_prior_year(),
+            "Week Total (Prior Year)": self.week_total_prior_year(),
             "Month to Date (Actual)": self.month_to_date_actual(),
             "Month to Date (Prior Year)": self.month_to_date_prior_year(),
             "For Winter Ending (Actual)": self.winter_ending_actual(),
@@ -81,6 +82,20 @@ class DateRangeCalculator:
         days_since_monday = prior_end_date.weekday()
         start = (prior_end_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
         return start, prior_end_date
+
+    def week_total_prior_year(self) -> Tuple[datetime, datetime]:
+        """Monday 00:00:00 to Sunday 23:59:59 of prior year week"""
+        # Get the prior year "For The Day" (DOW aligned)
+        prior_date = (self.base_date - timedelta(weeks=52))
+        
+        # Calculate Monday of that week
+        days_since_monday = prior_date.weekday()
+        start = (prior_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Calculate Sunday (end of week) - 6 days after Monday
+        end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        return start, end
 
     def month_to_date_actual(self) -> Tuple[datetime, datetime]:
         """First day of current month to For The Day"""

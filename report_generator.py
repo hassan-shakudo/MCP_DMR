@@ -34,13 +34,15 @@ class ReportGenerator:
             
     def generate_comprehensive_report(self, 
                                     resort_config: Dict[str, Any], 
-                                    run_date: datetime = None) -> str:
+                                    run_date: datetime = None,
+                                    debug: bool = False) -> str:
         """
         Generate the comprehensive Excel report for a resort.
         
         Args:
             resort_config: Dictionary containing resort details (dbName, resortName, groupNum)
             run_date: Date the report is being run (default now)
+            debug: If True, print data from stored procedures for debugging (default False)
             
         Returns:
             Path to saved Excel file
@@ -61,6 +63,7 @@ class ReportGenerator:
         range_names = [
             "For The Day (Actual)", "For The Day (Prior Year)",
             "For The Week Ending (Actual)", "For The Week Ending (Prior Year)",
+            "Week Total (Prior Year)",
             "Month to Date (Actual)", "Month to Date (Prior Year)",
             "For Winter Ending (Actual)", "For Winter Ending (Prior Year)"
         ]
@@ -78,18 +81,30 @@ class ReportGenerator:
                 # Revenue
                 revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
                 data_store[range_name]['revenue'] = revenue_dataframe
+                if debug:
+                    print(f"      [DEBUG] Revenue data for {range_name}:")
+                    print(f"      {revenue_dataframe}")
                 
                 # Payroll
                 payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
                 data_store[range_name]['payroll'] = payroll_dataframe
+                if debug:
+                    print(f"      [DEBUG] Payroll data for {range_name}:")
+                    print(f"      {payroll_dataframe}")
                 
                 # Visits
                 visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
                 data_store[range_name]['visits'] = visits_dataframe
+                if debug:
+                    print(f"      [DEBUG] Visits data for {range_name}:")
+                    print(f"      {visits_dataframe}")
                 
                 # Weather/Snow
                 snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
                 data_store[range_name]['snow'] = snow_dataframe
+                if debug:
+                    print(f"      [DEBUG] Snow data for {range_name}:")
+                    print(f"      {snow_dataframe}")
 
         # 3. Process Data and Collect Row Headers
         all_locations = set()
@@ -319,48 +334,47 @@ class ReportGenerator:
         worksheet.write(current_row, 0, "FINANCIALS", header_fmt)
         current_row += 1
         
-        sorted_departments = sorted(list(all_departments))
+        # Get all departments from payroll processed data (these are the ones we want to match)
+        payroll_departments = set()
+        for range_name in range_names:
+            payroll_departments.update(processed_payroll[range_name].keys())
         
-        for department in sorted_departments:
+        # Sort departments for consistent display
+        sorted_payroll_departments = sorted(list(payroll_departments))
+        
+        # For each department in payroll, match with revenue and display together
+        for department_code in sorted_payroll_departments:
             # Get department title for display (use code as fallback)
-            department_title = department_code_to_title.get(department, department)
+            department_title = department_code_to_title.get(department_code, department_code)
             
-            # Revenue Row
+            # Revenue Row - show revenue for this department (0 if not in revenue)
             worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_revenue[range_name].get(department, 0)
+                value = processed_revenue[range_name].get(department_code, 0)
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
-            # Payroll Row (only if payroll exists for this department? User says: "If we have the matching department in the payroll then we will display it.")
-            # But also says: "right below this will be the matching payroll... display it."
-            # If no payroll for department ever, maybe skip payroll row? Or show 0?
-            # "If we have the matching department... then we will display it" implies conditional.
-            # Check if any payroll exists for this department across any range.
+            # Payroll Row - show payroll for this department
+            worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
+            for column_index, range_name in enumerate(range_names):
+                value = processed_payroll[range_name].get(department_code, 0)
+                worksheet.write(current_row, column_index + 1, value, data_fmt)
+            current_row += 1
             
-            has_payroll = any(department in processed_payroll[range_name] for range_name in range_names)
-            
-            if has_payroll:
-                worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
-                for column_index, range_name in enumerate(range_names):
-                    value = processed_payroll[range_name].get(department, 0)
-                    worksheet.write(current_row, column_index + 1, value, data_fmt)
-                current_row += 1
+            # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
+            worksheet.write(current_row, 0, f"{department_title} %", row_header_fmt)
+            for column_index, range_name in enumerate(range_names):
+                revenue = abs(normalize_value(processed_revenue[range_name].get(department_code, 0)))
+                payroll = abs(normalize_value(processed_payroll[range_name].get(department_code, 0)))
                 
-                # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
-                worksheet.write(current_row, 0, f"PR % of {department_title}", row_header_fmt)
-                for column_index, range_name in enumerate(range_names):
-                    revenue = abs(normalize_value(processed_revenue[range_name].get(department, 0)))
-                    payroll = abs(normalize_value(processed_payroll[range_name].get(department, 0)))
-                    
-                    # If either revenue or payroll is 0, show 0%
-                    if revenue == 0 or payroll == 0:
-                        percentage = 0
-                    else:
-                        percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
-                    
-                    worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
-                current_row += 1
+                # If either revenue or payroll is 0, show 0%
+                if revenue == 0 or payroll == 0:
+                    percentage = 0
+                else:
+                    percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
+                
+                worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
+            current_row += 1
         
         # Totals
         current_row += 1
