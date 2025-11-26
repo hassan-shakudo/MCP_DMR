@@ -121,9 +121,7 @@ class ReportGenerator:
         def get_col(dataframe, candidates):
             for candidate_column in candidates:
                 if candidate_column in dataframe.columns:
-                    print(f"      [DEBUG] Found column: {candidate_column}, dataframe_columns: {dataframe.columns}, dataframe_head: {dataframe.head()}")
                     return candidate_column
-            print(f"      [DEBUG] No column found for {candidates} in dataframe_columns: {dataframe.columns}, dataframe_head: {dataframe.head()}")
             return None
         
         # Helper to safely convert numeric values (handles Decimal, None, etc.)
@@ -182,18 +180,11 @@ class ReportGenerator:
             revenue_dataframe = data_store[range_name]['revenue']
             if not revenue_dataframe.empty:
                 # Find department code and title columns
-                department_code_column = get_col(revenue_dataframe, ['Department', 'department', 'DepartmentCode', 'department_code', 'deptCode', 'DeptCode', 'dept_code'])
-                department_title_column = get_col(revenue_dataframe, ['DepartmentTitle', 'department_title', 'departmentTitle', 'DeptTitle', 'dept_title'])
-                revenue_column = get_col(revenue_dataframe, ['Revenue', 'revenue', 'Amount', 'amount']) # Guessing
-                
-                # If we can't find both department columns, try using any department-like column
-                if not department_code_column:
-                    print(f"      [DEBUG] No department code column found for {range_name}. dataframe_columns:: {revenue_dataframe.columns}, df_head: {revenue_dataframe.head()}")
-                    department_code_column = department_title_column
-                if not department_title_column:
-                    print(f"      [DEBUG] No department title column found for {range_name}. dataframe_columns:: {revenue_dataframe.columns}, df_head: {revenue_dataframe.head()}")
-                    department_title_column = department_code_column
-                
+                department_code_column = get_col(revenue_dataframe, ['Department', 'department', 'DepartmentCode', 'department_code', 'deptCode', 'DeptCode', 'dept_code']) or 'department'
+                department_title_column = get_col(revenue_dataframe, ['DepartmentTitle', 'department_title', 'departmentTitle', 'DeptTitle', 'dept_title']) or 'DepartmentTitle'
+                revenue_column = get_col(revenue_dataframe, ['Revenue', 'revenue', 'Amount', 'amount']) or 'revenue' # Guessing
+          
+                print(f'{department_code_column}, {department_title_column}, {revenue_column}')
                 # Find likely revenue column if not explicit
                 if not revenue_column:
                      numeric_columns = revenue_dataframe.select_dtypes(include=['number']).columns
@@ -209,7 +200,7 @@ class ReportGenerator:
                             title = str(row[department_title_column])
                             if code not in department_code_to_title:
                                 department_code_to_title[code] = title
-                    
+                    print(f'    [DEBUG] department_code_to_title: {department_code_to_title}')
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
                         department_string = str(department)
@@ -217,13 +208,14 @@ class ReportGenerator:
                         all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
                         if department_string not in department_code_to_title:
+                            print(f'    [DEBUG] FALLBACK: adding {department_string} to department_code_to_title')
                             department_code_to_title[department_string] = department_string
 
             # --- Payroll ---
             payroll_dataframe = data_store[range_name]['payroll']
             if not payroll_dataframe.empty:
                 # Need columns: Department, start_punchtime, end_punchtime, rate
-                department_column = get_col(payroll_dataframe, ['Department', 'department', 'Dept', 'dept'])
+                department_column = get_col(payroll_dataframe, ['Department', 'department', 'Dept', 'dept']) or 'department'
                 start_column = get_col(payroll_dataframe, ['start_punchtime', 'StartPunchTime', 'StartTime'])
                 end_column = get_col(payroll_dataframe, ['end_punchtime', 'EndPunchTime', 'EndTime'])
                 rate_column = get_col(payroll_dataframe, ['rate', 'Rate', 'HourlyRate'])
