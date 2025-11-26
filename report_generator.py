@@ -61,11 +61,15 @@ class ReportGenerator:
         date_calc = DateRangeCalculator(run_date)
         ranges = date_calc.get_all_ranges()
         range_names = [
-            "For The Day (Actual)", "For The Day (Prior Year)",
-            "For The Week Ending (Actual)", "For The Week Ending (Prior Year)",
-            "Week Total (Prior Year)",
-            "Month to Date (Actual)", "Month to Date (Prior Year)",
-            "For Winter Ending (Actual)", "For Winter Ending (Prior Year)"
+            "For The Day (Actual)",
+            # "For The Day (Prior Year)",
+            # "For The Week Ending (Actual)", 
+            # "For The Week Ending (Prior Year)",
+            # "Week Total (Prior Year)",
+            # "Month to Date (Actual)", 
+            # "Month to Date (Prior Year)",
+            # "For Winter Ending (Actual)", 
+            # "For Winter Ending (Prior Year)"
         ]
         
         # 2. Fetch Data for all ranges
@@ -193,21 +197,21 @@ class ReportGenerator:
                          revenue_column = numeric_columns[-1]
 
                 if department_code_column and revenue_column:
-                    # Build mapping from code to title
+                    # Build mapping from code to title (with whitespace trimming)
                     if department_title_column and department_title_column != department_code_column:
                         for _, row in revenue_dataframe.iterrows():
-                            code = str(row[department_code_column])
-                            title = str(row[department_title_column])
-                            if code not in department_code_to_title:
+                            code = str(row[department_code_column]).strip()
+                            title = str(row[department_title_column]).strip()
+                            if code and code not in department_code_to_title:
                                 department_code_to_title[code] = title
                     print(f'    [DEBUG] department_code_to_title: {department_code_to_title}')
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
-                        department_string = str(department)
+                        department_string = str(department).strip()
                         processed_revenue[range_name][department_string] = value
                         all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
-                        if department_string not in department_code_to_title:
+                        if department_string and department_string not in department_code_to_title:
                             print(f'    [DEBUG] FALLBACK: adding {department_string} to department_code_to_title')
                             department_code_to_title[department_string] = department_string
 
@@ -216,11 +220,21 @@ class ReportGenerator:
             if not payroll_dataframe.empty:
                 # Need columns: Department, start_punchtime, end_punchtime, rate
                 department_column = get_col(payroll_dataframe, ['Department', 'department', 'Dept', 'dept']) or 'department'
+                department_title_column = get_col(payroll_dataframe, ['DepartmentTitle', 'department_title', 'departmentTitle', 'DeptTitle', 'dept_title'])
                 start_column = get_col(payroll_dataframe, ['start_punchtime', 'StartPunchTime', 'StartTime'])
                 end_column = get_col(payroll_dataframe, ['end_punchtime', 'EndPunchTime', 'EndTime'])
                 rate_column = get_col(payroll_dataframe, ['rate', 'Rate', 'HourlyRate'])
                 
                 if department_column and start_column and end_column and rate_column:
+                    # Build mapping from code to title (with whitespace trimming)
+                    # Check if payroll has a title column and build mapping from it
+                    if department_title_column and department_title_column != department_column:
+                        for _, row in payroll_dataframe.iterrows():
+                            code = str(row[department_column]).strip()
+                            title = str(row[department_title_column]).strip()
+                            if code and code not in department_code_to_title:
+                                department_code_to_title[code] = title
+                    
                     # Vectorized calculation is faster but let's iterate for safety with OT logic
                     # Group by department first to avoid huge DataFrame operations if needed
                     # But row-based calc is needed for OT
@@ -237,8 +251,12 @@ class ReportGenerator:
                         start_time = row[start_column]
                         end_time = row[end_column]
                         rate = row[rate_column]
-                        department = str(row[department_column])
+                        department = str(row[department_column]).strip()
                         all_departments.add(department) # Add to departments if not in revenue
+                        
+                        # If no title mapping yet, use the code as title
+                        if department and department not in department_code_to_title:
+                            department_code_to_title[department] = department
                         
                         # Calculate hours
                         hours_worked = (end_time - start_time).total_seconds() / 3600.0
@@ -341,27 +359,29 @@ class ReportGenerator:
         # For each department in payroll, match with revenue and display together
         for department_code in sorted_payroll_departments:
             # Get department title for display (use code as fallback)
-            department_title = department_code_to_title.get(department_code, department_code)
+            # Trim whitespace from code before lookup
+            trimmed_code = str(department_code).strip()
+            department_title = department_code_to_title.get(trimmed_code, 'Fallback Title')
             
             # Revenue Row - show revenue for this department (0 if not in revenue)
             worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_revenue[range_name].get(department_code, 0)
+                value = processed_revenue[range_name].get(trimmed_code, 0)
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
             # Payroll Row - show payroll for this department
             worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_payroll[range_name].get(department_code, 0)
+                value = processed_payroll[range_name].get(trimmed_code, 0)
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
             # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
             worksheet.write(current_row, 0, f"{department_title} %", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                revenue = abs(normalize_value(processed_revenue[range_name].get(department_code, 0)))
-                payroll = abs(normalize_value(processed_payroll[range_name].get(department_code, 0)))
+                revenue = abs(normalize_value(processed_revenue[range_name].get(trimmed_code, 0)))
+                payroll = abs(normalize_value(processed_payroll[range_name].get(trimmed_code, 0)))
                 
                 # If either revenue or payroll is 0, show 0%
                 if revenue == 0 or payroll == 0:
