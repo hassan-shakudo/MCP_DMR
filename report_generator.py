@@ -62,14 +62,14 @@ class ReportGenerator:
         ranges = date_calc.get_all_ranges()
         range_names = [
             "For The Day (Actual)",
-            # "For The Day (Prior Year)",
-            # "For The Week Ending (Actual)", 
-            # "For The Week Ending (Prior Year)",
-            # "Week Total (Prior Year)",
-            # "Month to Date (Actual)", 
-            # "Month to Date (Prior Year)",
-            # "For Winter Ending (Actual)", 
-            # "For Winter Ending (Prior Year)"
+            "For The Day (Prior Year)",
+            "For The Week Ending (Actual)", 
+            "For The Week Ending (Prior Year)",
+            "Week Total (Prior Year)",
+            "Month to Date (Actual)", 
+            "Month to Date (Prior Year)",
+            "For Winter Ending (Actual)", 
+            "For Winter Ending (Prior Year)"
         ]
         
         # 2. Fetch Data for all ranges
@@ -204,7 +204,7 @@ class ReportGenerator:
                             title = str(row[department_title_column]).strip()
                             if code and code not in department_code_to_title:
                                 department_code_to_title[code] = title
-                    print(f'    [DEBUG] department_code_to_title: {department_code_to_title}')
+                    debug and print(f'    [DEBUG] department_code_to_title: {department_code_to_title}')
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
                         department_string = str(department).strip()
@@ -212,7 +212,7 @@ class ReportGenerator:
                         all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
                         if department_string and department_string not in department_code_to_title:
-                            print(f'    [DEBUG] FALLBACK: adding {department_string} to department_code_to_title')
+                            debug and print(f'    [DEBUG] FALLBACK: adding {department_string} to department_code_to_title')
                             department_code_to_title[department_string] = department_string
 
             # --- Payroll ---
@@ -262,13 +262,14 @@ class ReportGenerator:
                         hours_worked = (end_time - start_time).total_seconds() / 3600.0
                         if hours_worked < 0: hours_worked = 0 # Should not happen but safety
                         
-                        # OT Logic
-                        # <= 8 hrs: hours * rate
-                        # > 8 hrs: (8 * rate) + ((hours - 8) * rate * 1.5)
-                        if hours_worked <= 8:
-                            wages = hours_worked * rate
-                        else:
-                            wages = (8 * rate) + ((hours_worked - 8) * rate * 1.5)
+                        ## Sample OT Logic
+                        ## <= 8 hrs: hours * rate
+                        ## > 8 hrs: (8 * rate) + ((hours - 8) * rate * 1.5)
+                        # if hours_worked <= 8:
+                        #     wages = hours_worked * rate
+                        # else:
+                        #     wages = (8 * rate) + ((hours_worked - 8) * rate * 1.5)
+                        wages = hours_worked * rate
                             
                         processed_payroll[range_name][department] = processed_payroll[range_name].get(department, 0) + wages
 
@@ -361,7 +362,7 @@ class ReportGenerator:
             # Get department title for display (use code as fallback)
             # Trim whitespace from code before lookup
             trimmed_code = str(department_code).strip()
-            department_title = department_code_to_title.get(trimmed_code, 'Fallback Title')
+            department_title = department_code_to_title.get(trimmed_code, trimmed_code)
             
             # Revenue Row - show revenue for this department (0 if not in revenue)
             worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
