@@ -226,9 +226,9 @@ class ReportGenerator:
                 base_column = get_col(snow_dataframe, CandidateColumns.baseDepth)
                 
                 if snow_column:
-                    processed_snow[range_name]['snow_24hrs'] = snow_dataframe[snow_column].sum()
+                    processed_snow[range_name]['snow_24hrs'] = normalize_value(snow_dataframe[snow_column].sum())
                 if base_column:
-                    processed_snow[range_name]['base_depth'] = snow_dataframe[base_column].sum() # Instruction: "sum up"
+                    processed_snow[range_name]['base_depth'] = normalize_value(snow_dataframe[base_column].sum()) # Instruction: "sum up"
 
             # --- Visits ---
             visits_dataframe = data_store[range_name]['visits']
@@ -257,7 +257,7 @@ class ReportGenerator:
                         
                     for location, value in grouped.items():
                         location_string = str(location)
-                        processed_visits[range_name][location_string] = value
+                        processed_visits[range_name][location_string] = normalize_value(value)
                         all_locations.add(location_string)
 
             # --- Revenue ---
@@ -287,7 +287,7 @@ class ReportGenerator:
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
                         department_string = str(department).strip()
-                        processed_revenue[range_name][department_string] = value
+                        processed_revenue[range_name][department_string] = normalize_value(value)
                         all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
                         if department_string and department_string not in department_code_to_title:
@@ -350,7 +350,8 @@ class ReportGenerator:
 
                         # Calculate wages (simple linear calculation)
                         wages = hours_worked * rate
-                        calculated_payroll[department] = calculated_payroll.get(department, 0) + wages
+                        current_wages = normalize_value(calculated_payroll.get(department, 0))
+                        calculated_payroll[department] = current_wages + normalize_value(wages)
             
             # Step 2: Process history payroll data
             history_payroll_dataframe = data_store[range_name]['payroll_history']
@@ -375,27 +376,27 @@ class ReportGenerator:
                 # For The Day (Actual): calculated payroll + salaryPayrollRatePerDay
                 for dept_code, calculated_wages in calculated_payroll.items():
                     salary_rate = salary_payroll_rates.get(dept_code, 0)
-                    total_payroll = calculated_wages + salary_rate
+                    total_payroll = normalize_value(calculated_wages) + normalize_value(salary_rate)
                     processed_payroll[range_name][dept_code] = total_payroll
                 
                 # Add departments that only have salary payroll
                 for dept_code, salary_rate in salary_payroll_rates.items():
                     if dept_code not in processed_payroll[range_name]:
-                        processed_payroll[range_name][dept_code] = salary_rate
+                        processed_payroll[range_name][dept_code] = normalize_value(salary_rate)
                         all_departments.add(dept_code)
             
             elif range_name == "For The Week Ending (Actual)":
                 # For The Week Ending (Actual): calculated payroll + (salaryPayrollRatePerDay × number of days)
                 for dept_code, calculated_wages in calculated_payroll.items():
                     salary_rate = salary_payroll_rates.get(dept_code, 0)
-                    salary_total = salary_rate * days_in_range
-                    total_payroll = calculated_wages + salary_total
+                    salary_total = normalize_value(salary_rate) * days_in_range
+                    total_payroll = normalize_value(calculated_wages) + salary_total
                     processed_payroll[range_name][dept_code] = total_payroll
                 
                 # Add departments that only have salary payroll
                 for dept_code, salary_rate in salary_payroll_rates.items():
                     if dept_code not in processed_payroll[range_name]:
-                        salary_total = salary_rate * days_in_range
+                        salary_total = normalize_value(salary_rate) * days_in_range
                         processed_payroll[range_name][dept_code] = salary_total
                         all_departments.add(dept_code)
             
@@ -411,14 +412,14 @@ class ReportGenerator:
                     # Entire range is within 7 days - use salary rate for all days (no history needed)
                     for dept_code, calculated_wages in calculated_payroll.items():
                         salary_rate = salary_payroll_rates.get(dept_code, 0)
-                        salary_total = salary_rate * days_in_range
-                        total_payroll = calculated_wages + salary_total
+                        salary_total = normalize_value(salary_rate) * days_in_range
+                        total_payroll = normalize_value(calculated_wages) + salary_total
                         processed_payroll[range_name][dept_code] = total_payroll
                     
                     # Add departments that only have salary payroll
                     for dept_code, salary_rate in salary_payroll_rates.items():
                         if dept_code not in processed_payroll[range_name]:
-                            salary_total = salary_rate * days_in_range
+                            salary_total = normalize_value(salary_rate) * days_in_range
                             processed_payroll[range_name][dept_code] = salary_total
                             all_departments.add(dept_code)
                 else:
@@ -426,15 +427,15 @@ class ReportGenerator:
                     # Calculate recent 7 days salary payroll
                     recent_week_salary_payroll = {}
                     for dept_code, salary_rate in salary_payroll_rates.items():
-                        recent_week_salary_payroll[dept_code] = salary_rate * 7
+                        recent_week_salary_payroll[dept_code] = normalize_value(salary_rate) * 7
                     
                     # Rest of range salary payroll from history (already fetched for adjusted range)
-                    rest_range_salary_payroll = history_payroll.copy()
+                    rest_range_salary_payroll = {k: normalize_value(v) for k, v in history_payroll.items()}
                     
                     # Combine all payroll components
                     all_dept_codes = set(calculated_payroll.keys()) | set(recent_week_salary_payroll.keys()) | set(rest_range_salary_payroll.keys())
                     for dept_code in all_dept_codes:
-                        calculated_wages = calculated_payroll.get(dept_code, 0)
+                        calculated_wages = normalize_value(calculated_payroll.get(dept_code, 0))
                         recent_salary = recent_week_salary_payroll.get(dept_code, 0)
                         rest_salary = rest_range_salary_payroll.get(dept_code, 0)
                         total_payroll = calculated_wages + recent_salary + rest_salary
@@ -445,13 +446,13 @@ class ReportGenerator:
                 # All Prior Year ranges: calculated payroll + historyPayrollDeptTotal
                 for dept_code, calculated_wages in calculated_payroll.items():
                     history_total = history_payroll.get(dept_code, 0)
-                    total_payroll = calculated_wages + history_total
+                    total_payroll = normalize_value(calculated_wages) + normalize_value(history_total)
                     processed_payroll[range_name][dept_code] = total_payroll
                 
                 # Add departments that only have history payroll
                 for dept_code, history_total in history_payroll.items():
                     if dept_code not in processed_payroll[range_name]:
-                        processed_payroll[range_name][dept_code] = history_total
+                        processed_payroll[range_name][dept_code] = normalize_value(history_total)
                         all_departments.add(dept_code)
 
 
@@ -498,12 +499,14 @@ class ReportGenerator:
         # --- Snow Section ---
         worksheet.write(current_row, 0, "Snow 24hrs", row_header_fmt)
         for column_index, range_name in enumerate(range_names):
-            worksheet.write(current_row, column_index + 1, processed_snow[range_name]['snow_24hrs'], snow_fmt)
+            value = normalize_value(processed_snow[range_name]['snow_24hrs'])
+            worksheet.write(current_row, column_index + 1, value, snow_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Base Depth", row_header_fmt)
         for column_index, range_name in enumerate(range_names):
-            worksheet.write(current_row, column_index + 1, processed_snow[range_name]['base_depth'], snow_fmt)
+            value = normalize_value(processed_snow[range_name]['base_depth'])
+            worksheet.write(current_row, column_index + 1, value, snow_fmt)
         current_row += 2 # Spacer
         
         # --- Visits Section ---
@@ -515,14 +518,14 @@ class ReportGenerator:
         for location in sorted_locations:
             worksheet.write(current_row, 0, location, row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_visits[range_name].get(location, 0)
+                value = normalize_value(processed_visits[range_name].get(location, 0))
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
         # Total Visits
         worksheet.write(current_row, 0, "Total Tickets", header_fmt)
         for column_index, range_name in enumerate(range_names):
-            total = sum(processed_visits[range_name].values())
+            total = normalize_value(sum(processed_visits[range_name].values()))
             worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 2
         
@@ -548,14 +551,14 @@ class ReportGenerator:
             # Revenue Row - show revenue for this department (0 if not in revenue)
             worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_revenue[range_name].get(trimmed_code, 0)
+                value = normalize_value(processed_revenue[range_name].get(trimmed_code, 0))
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
             # Payroll Row - show payroll for this department
             worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
             for column_index, range_name in enumerate(range_names):
-                value = processed_payroll[range_name].get(trimmed_code, 0)
+                value = normalize_value(processed_payroll[range_name].get(trimmed_code, 0))
                 worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
@@ -578,13 +581,13 @@ class ReportGenerator:
         current_row += 1
         worksheet.write(current_row, 0, "Total Revenue", header_fmt)
         for column_index, range_name in enumerate(range_names):
-            total = sum(processed_revenue[range_name].values())
+            total = normalize_value(sum(processed_revenue[range_name].values()))
             worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Total Payroll", header_fmt)
         for column_index, range_name in enumerate(range_names):
-            total = sum(processed_payroll[range_name].values())
+            total = normalize_value(sum(processed_payroll[range_name].values()))
             worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 1
         
@@ -606,8 +609,8 @@ class ReportGenerator:
         # Net Total Revenue
         worksheet.write(current_row, 0, "Net Total Revenue", header_fmt)
         for column_index, range_name in enumerate(range_names):
-            total_revenue = sum(processed_revenue[range_name].values())
-            total_payroll = sum(processed_payroll[range_name].values())
+            total_revenue = normalize_value(sum(processed_revenue[range_name].values()))
+            total_payroll = normalize_value(sum(processed_payroll[range_name].values()))
             net_total = total_revenue - total_payroll
             worksheet.write(current_row, column_index + 1, net_total, data_fmt)
             
