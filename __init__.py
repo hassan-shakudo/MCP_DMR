@@ -9,7 +9,7 @@ __version__ = "1.0.0"
 __author__ = "Mountain Capital Partners"
 
 # Import main classes and functions for easy access
-from .config import DatabaseConfig, ResortConfig
+from .config import DatabaseConfig, RESORT_MAPPING, STORED_PROCEDURES, CandidateColumns
 from .db_connection import DatabaseConnection, create_connection
 from .stored_procedures import (
     StoredProcedures,
@@ -24,7 +24,9 @@ from .report_generator import ReportGenerator
 __all__ = [
     # Config
     'DatabaseConfig',
-    'ResortConfig',
+    'RESORT_MAPPING',
+    'STORED_PROCEDURES',
+    'CandidateColumns',
     
     # Connection
     'DatabaseConnection',

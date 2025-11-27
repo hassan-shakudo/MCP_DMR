@@ -5,7 +5,7 @@ Mountain Capital Partners - Ski Resort Data Analysis
 
 import pandas as pd
 import pyodbc
-from typing import Optional, Tuple, Dict
+from typing import Tuple, Dict
 from datetime import datetime, timedelta
 
 

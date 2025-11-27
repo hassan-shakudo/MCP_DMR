@@ -5,7 +5,7 @@ Mountain Capital Partners - Ski Resort Data Analysis
 
 from datetime import datetime
 from report_generator import ReportGenerator
-from config import ResortConfig
+from config import RESORT_MAPPING
 
 
 def main():
@@ -19,7 +19,7 @@ def main():
     
     # Get list of resorts to process
     # You can filter this list if you only want specific resorts
-    resorts = ResortConfig.RESORT_MAPPING
+    resorts = RESORT_MAPPING
     
     saved_files = []
     

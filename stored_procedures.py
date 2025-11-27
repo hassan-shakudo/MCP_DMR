@@ -7,7 +7,7 @@ import pyodbc
 import pandas as pd
 from datetime import datetime
 from typing import List, Tuple, Union
-from config import ResortConfig
+from config import STORED_PROCEDURES
 from data_utils import pyodbc_rows_to_dataframe
 
 
@@ -22,7 +22,7 @@ class StoredProcedures:
             conn: Active database connection
         """
         self.conn = conn
-        self.procedures = ResortConfig.STORED_PROCEDURES
+        self.procedures = STORED_PROCEDURES
     
     def execute_revenue(self, 
                        database: str,
@@ -69,7 +69,55 @@ class StoredProcedures:
             Payroll data as DataFrame or list of tuples
         """
         cursor = self.conn.cursor()
-        cursor.execute(self.procedures['Payroll'], (resort, date_ini, date_end))
+        cursor.execute(self.procedures['PayrollContract'], (resort, date_ini, date_end))
+        
+        if return_dataframe:
+            return pyodbc_rows_to_dataframe(cursor)
+        else:
+            return cursor.fetchall()
+    
+    def execute_payroll_salary(self,
+                               resort: str,
+                               return_dataframe: bool = True) -> Union[pd.DataFrame, List[Tuple]]:
+        """
+        Execute the Salary Payroll stored procedure (Shakudo_DMRGetPayrollSalary)
+        Returns per-day payroll rate for each department for salaried employees.
+        
+        Args:
+            resort: Resort name (e.g., 'Purgatory', 'Snowbowl')
+            return_dataframe: If True, return pd.DataFrame; if False, return raw rows
+            
+        Returns:
+            Salary payroll data as DataFrame with columns: deptcode, DepartmentTitle, rate_per_day
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(self.procedures['PayrollSalaryActive'], (resort,))
+        
+        if return_dataframe:
+            return pyodbc_rows_to_dataframe(cursor)
+        else:
+            return cursor.fetchall()
+    
+    def execute_payroll_history(self,
+                               resort: str,
+                               date_ini: Union[datetime, str],
+                               date_end: Union[datetime, str],
+                               return_dataframe: bool = True) -> Union[pd.DataFrame, List[Tuple]]:
+        """
+        Execute the Payroll History stored procedure (Shakudo_DMRGetPayrollHistory)
+        Returns historical payroll totals for departments for date ranges older than 7 days.
+        
+        Args:
+            resort: Resort name (e.g., 'Purgatory', 'Snowbowl')
+            date_ini: Start date (datetime or string 'YYYY-MM-DD')
+            date_end: End date (datetime or string 'YYYY-MM-DD HH:MM:SS')
+            return_dataframe: If True, return pd.DataFrame; if False, return raw rows
+            
+        Returns:
+            Historical payroll data as DataFrame with columns: department, total
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(self.procedures['PayrollSalaryHistory'], (resort, date_ini, date_end))
         
         if return_dataframe:
             return pyodbc_rows_to_dataframe(cursor)
