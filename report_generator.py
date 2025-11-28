@@ -36,14 +36,14 @@ class ReportGenerator:
     def generate_comprehensive_report(self, 
                                     resort_config: Dict[str, Any], 
                                     run_date: datetime = None,
-                                    debug: bool = False) -> str:
+                                    debug: Any = False) -> str:
         """
         Generate the comprehensive Excel report for a resort.
         
         Args:
             resort_config: Dictionary containing resort details (dbName, resortName, groupNum)
             run_date: Date the report is being run (default now)
-            debug: If True, print data from stored procedures for debugging (default False)
+            debug: Debug mode - False (no debug), 'simple' (top 5 rows), or 'verbose' (complete datasets)
             
         Returns:
             Path to saved Excel file
@@ -85,9 +85,12 @@ class ReportGenerator:
             # Fetch salary payroll once per resort
             print(f"   ⏳ Fetching salary payroll data for {resort_name}...")
             salary_payroll_data = stored_procedures.execute_payroll_salary(resort_name)
-            if debug:
-                print(f"      [DEBUG] Salary payroll data:")
+            if debug == 'verbose':
+                print(f"      [DEBUG VERBOSE] Salary payroll data (complete):")
                 print(f"      {salary_payroll_data}")
+            elif debug == 'simple':
+                print(f"      [DEBUG SIMPLE] Salary payroll data (top 5 rows):")
+                print(f"      {salary_payroll_data.head(5) if not salary_payroll_data.empty else 'Empty DataFrame'}")
             
             for range_name in range_names:
                 start, end = ranges[range_name]
@@ -96,30 +99,42 @@ class ReportGenerator:
                 # Revenue
                 revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
                 data_store[range_name]['revenue'] = revenue_dataframe
-                if debug:
-                    print(f"      [DEBUG] Revenue data for {range_name}:")
+                if debug == 'verbose':
+                    print(f"      [DEBUG VERBOSE] Revenue data for {range_name} (complete):")
                     print(f"      {revenue_dataframe}")
+                elif debug == 'simple':
+                    print(f"      [DEBUG SIMPLE] Revenue data for {range_name} (top 5 rows):")
+                    print(f"      {revenue_dataframe.head(5) if not revenue_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Payroll
                 payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
                 data_store[range_name]['payroll'] = payroll_dataframe
-                if debug:
-                    print(f"      [DEBUG] Payroll data for {range_name}:")
+                if debug == 'verbose':
+                    print(f"      [DEBUG VERBOSE] Payroll data for {range_name} (complete):")
                     print(f"      {payroll_dataframe}")
+                elif debug == 'simple':
+                    print(f"      [DEBUG SIMPLE] Payroll data for {range_name} (top 5 rows):")
+                    print(f"      {payroll_dataframe.head(5) if not payroll_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Visits
                 visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
                 data_store[range_name]['visits'] = visits_dataframe
-                if debug:
-                    print(f"      [DEBUG] Visits data for {range_name}:")
+                if debug == 'verbose':
+                    print(f"      [DEBUG VERBOSE] Visits data for {range_name} (complete):")
                     print(f"      {visits_dataframe}")
+                elif debug == 'simple':
+                    print(f"      [DEBUG SIMPLE] Visits data for {range_name} (top 5 rows):")
+                    print(f"      {visits_dataframe.head(5) if not visits_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Weather/Snow
                 snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
                 data_store[range_name]['snow'] = snow_dataframe
-                if debug:
-                    print(f"      [DEBUG] Snow data for {range_name}:")
+                if debug == 'verbose':
+                    print(f"      [DEBUG VERBOSE] Snow data for {range_name} (complete):")
                     print(f"      {snow_dataframe}")
+                elif debug == 'simple':
+                    print(f"      [DEBUG SIMPLE] Snow data for {range_name} (top 5 rows):")
+                    print(f"      {snow_dataframe.head(5) if not snow_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Payroll History - fetch for appropriate range
                 # For Month to Date and Winter Ending (Actual), if range > 7 days, 
@@ -141,13 +156,16 @@ class ReportGenerator:
                 if should_fetch_history:
                     history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, history_start, history_end)
                     data_store[range_name]['payroll_history'] = history_payroll_dataframe
-                    if debug:
-                        print(f"      [DEBUG] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}):")
+                    if debug == 'verbose':
+                        print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}) (complete):")
                         print(f"      {history_payroll_dataframe}")
+                    elif debug == 'simple':
+                        print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}) (top 5 rows):")
+                        print(f"      {history_payroll_dataframe.head(5) if not history_payroll_dataframe.empty else 'Empty DataFrame'}")
                 else:
                     # No history needed for this range
                     data_store[range_name]['payroll_history'] = pd.DataFrame()
-                    if debug:
+                    if debug in ['simple', 'verbose']:
                         print(f"      [DEBUG] Skipping payroll history for {range_name} (range <= 7 days, using salary payroll only)")
 
         # 3. Process Data and Collect Row Headers
@@ -201,12 +219,23 @@ class ReportGenerator:
                         
                         # Also update department_code_to_title if available
                         if title_column and title_column in row:
-                            title = str(row[title_column]).strip()
-                            if title and dept_code not in department_code_to_title:
-                                department_code_to_title[dept_code] = title
+                            title = str(row[title_column]).strip() if pd.notna(row[title_column]) else ""
+                            if dept_code:
+                                if dept_code not in department_code_to_title:
+                                    if title:
+                                        department_code_to_title[dept_code] = title
+                                    else:
+                                        # Warning: Empty/null title found
+                                        print(f"    ⚠️  [WARN] Empty/null title for department code '{dept_code}' in salary payroll data")
+                                        print(f"       Salary payroll row: {row.to_dict()}")
+                                elif not title:
+                                    # Warning: Title exists in mapping but current row has empty title
+                                    print(f"    ⚠️  [WARN] Empty/null title for department code '{dept_code}' in salary payroll data (mapping already exists)")
+                                    print(f"       Salary payroll row: {row.to_dict()}")
                 
-                if debug:
+                if debug in ['simple', 'verbose']:
                     print(f"      [DEBUG] Salary payroll rates: {salary_payroll_rates}")
+                    print(f"      [DEBUG] Department code to title mapping (from salary payroll): {department_code_to_title}")
         
         # Helper function to calculate days in a date range
         def calculate_days_in_range(start_date: datetime, end_date: datetime) -> int:
@@ -279,19 +308,57 @@ class ReportGenerator:
                     # Build mapping from code to title (with whitespace trimming)
                     if department_title_column and department_title_column != department_code_column:
                         for _, row in revenue_dataframe.iterrows():
-                            code = str(row[department_code_column]).strip()
-                            title = str(row[department_title_column]).strip()
-                            if code and code not in department_code_to_title:
-                                department_code_to_title[code] = title
-                    debug and print(f'    [DEBUG] department_code_to_title: {department_code_to_title}')
+                            code = trim_dept_code(row[department_code_column])
+                            title = str(row[department_title_column]).strip() if pd.notna(row[department_title_column]) else ""
+                            if code:
+                                if code not in department_code_to_title:
+                                    if title:
+                                        department_code_to_title[code] = title
+                                    else:
+                                        # Warning: Empty/null title found
+                                        print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in revenue data")
+                                        print(f"       Revenue row: {row.to_dict()}")
+                                elif not title:
+                                    # Warning: Title exists in mapping but current row has empty title
+                                    print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in revenue data (mapping already exists)")
+                                    print(f"       Revenue row: {row.to_dict()}")
+                    if debug in ['simple', 'verbose']:
+                        print(f'    [DEBUG] Department code to title mapping (after revenue processing for {range_name}): {department_code_to_title}')
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
-                        department_string = str(department).strip()
+                        department_string = trim_dept_code(department)
                         processed_revenue[range_name][department_string] = normalize_value(value)
                         all_departments.add(department_string)
                         # If no title mapping yet, use the code as title
                         if department_string and department_string not in department_code_to_title:
-                            debug and print(f'    [DEBUG] FALLBACK: adding {department_string} to department_code_to_title')
+                            # Warning: Fallback triggered - find matching rows
+                            print(f"    ⚠️  [WARN] FALLBACK: No title found for department code '{department_string}' - using code as title")
+                            
+                            # Find matching rows in revenue dataframe
+                            revenue_matches = revenue_dataframe[
+                                revenue_dataframe[department_code_column].apply(lambda x: trim_dept_code(x) == department_string)
+                            ]
+                            if not revenue_matches.empty:
+                                print(f"       Matching revenue rows ({len(revenue_matches)}):")
+                                for idx, match_row in revenue_matches.head(3).iterrows():
+                                    print(f"         Row {idx}: {match_row.to_dict()}")
+                                if len(revenue_matches) > 3:
+                                    print(f"         ... and {len(revenue_matches) - 3} more rows")
+                            
+                            # Find matching rows in payroll dataframe (if available)
+                            if not payroll_dataframe.empty:
+                                payroll_dept_col = get_col(payroll_dataframe, CandidateColumns.department)
+                                if payroll_dept_col:
+                                    payroll_matches = payroll_dataframe[
+                                        payroll_dataframe[payroll_dept_col].apply(lambda x: trim_dept_code(x) == department_string)
+                                    ]
+                                    if not payroll_matches.empty:
+                                        print(f"       Matching payroll rows ({len(payroll_matches)}):")
+                                        for idx, match_row in payroll_matches.head(3).iterrows():
+                                            print(f"         Row {idx}: {match_row.to_dict()}")
+                                        if len(payroll_matches) > 3:
+                                            print(f"         ... and {len(payroll_matches) - 3} more rows")
+                            
                             department_code_to_title[department_string] = department_string
 
             # --- Payroll ---
@@ -313,9 +380,19 @@ class ReportGenerator:
                     if department_title_column and department_title_column != department_column:
                         for _, row in payroll_dataframe.iterrows():
                             code = trim_dept_code(row[department_column])
-                            title = str(row[department_title_column]).strip()
-                            if code and code not in department_code_to_title:
-                                department_code_to_title[code] = title
+                            title = str(row[department_title_column]).strip() if pd.notna(row[department_title_column]) else ""
+                            if code:
+                                if code not in department_code_to_title:
+                                    if title:
+                                        department_code_to_title[code] = title
+                                    else:
+                                        # Warning: Empty/null title found
+                                        print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in payroll data")
+                                        print(f"       Payroll row: {row.to_dict()}")
+                                elif not title:
+                                    # Warning: Title exists in mapping but current row has empty title
+                                    print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in payroll data (mapping already exists)")
+                                    print(f"       Payroll row: {row.to_dict()}")
                     
                     # Ensure datetime
                     payroll_dataframe[start_column] = pd.to_datetime(payroll_dataframe[start_column], errors='coerce')
@@ -334,6 +411,34 @@ class ReportGenerator:
                         
                         # If no title mapping yet, use the code as title
                         if department and department not in department_code_to_title:
+                            # Warning: Fallback triggered - find matching rows
+                            print(f"    ⚠️  [WARN] FALLBACK: No title found for department code '{department}' - using code as title")
+                            
+                            # Find matching rows in payroll dataframe
+                            payroll_matches = payroll_dataframe[
+                                payroll_dataframe[department_column].apply(lambda x: trim_dept_code(x) == department)
+                            ]
+                            if not payroll_matches.empty:
+                                print(f"       Matching payroll rows ({len(payroll_matches)}):")
+                                for idx, match_row in payroll_matches.head(3).iterrows():
+                                    print(f"         Row {idx}: {match_row.to_dict()}")
+                                if len(payroll_matches) > 3:
+                                    print(f"         ... and {len(payroll_matches) - 3} more rows")
+                            
+                            # Find matching rows in revenue dataframe (if available)
+                            if not revenue_dataframe.empty:
+                                revenue_dept_col = get_col(revenue_dataframe, CandidateColumns.department)
+                                if revenue_dept_col:
+                                    revenue_matches = revenue_dataframe[
+                                        revenue_dataframe[revenue_dept_col].apply(lambda x: trim_dept_code(x) == department)
+                                    ]
+                                    if not revenue_matches.empty:
+                                        print(f"       Matching revenue rows ({len(revenue_matches)}):")
+                                        for idx, match_row in revenue_matches.head(3).iterrows():
+                                            print(f"         Row {idx}: {match_row.to_dict()}")
+                                        if len(revenue_matches) > 3:
+                                            print(f"         ... and {len(revenue_matches) - 3} more rows")
+                            
                             department_code_to_title[department] = department
                         
                         # Calculate hours
@@ -455,6 +560,17 @@ class ReportGenerator:
                         processed_payroll[range_name][dept_code] = normalize_value(history_total)
                         all_departments.add(dept_code)
 
+        # Debug: Print final department code to title mapping (shown in both simple and verbose modes)
+        if debug in ['simple', 'verbose']:
+            print(f"\n{'='*70}")
+            print(f"  [DEBUG] Final Department Code to Title Mapping")
+            print(f"{'='*70}")
+            if department_code_to_title:
+                for dept_code, dept_title in sorted(department_code_to_title.items()):
+                    print(f"    {dept_code} -> {dept_title}")
+            else:
+                print("    (No mappings found)")
+            print(f"{'='*70}\n")
 
         # 4. Write to Excel
         filename = f"{resort_name}_Report_{self.timestamp}.xlsx"
@@ -545,7 +661,7 @@ class ReportGenerator:
         for department_code in sorted_payroll_departments:
             # Get department title for display (use code as fallback)
             # Trim whitespace from code before lookup
-            trimmed_code = str(department_code).strip()
+            trimmed_code = trim_dept_code(department_code)
             department_title = department_code_to_title.get(trimmed_code, trimmed_code)
             
             # Revenue Row - show revenue for this department (0 if not in revenue)
