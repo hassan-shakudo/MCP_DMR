@@ -1,4 +1,4 @@
-# Environment variables
+# # Environment variables
 #.env
 
 # Python
@@ -35,9 +35,9 @@ ENV/
 *.swo
 *~
 
-# Reports
-reports/*.xlsx
-reports/*.xls
+# # Reports
+# reports/*.xlsx
+# reports/*.xls
 
 # Jupyter Notebook
 .ipynb_checkpoints
