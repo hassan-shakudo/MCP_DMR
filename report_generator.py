@@ -473,33 +473,33 @@ class ReportGenerator:
                             if department and department not in department_code_to_title:
                                 # Warning: Fallback triggered - find matching rows
                                 print(f"    ⚠️  [WARN] FALLBACK: No title found for department code '{department}' - using code as title")
-                            
-                            # Find matching rows in payroll dataframe
-                            payroll_matches = payroll_dataframe[
-                                payroll_dataframe[department_column].apply(lambda x: trim_dept_code(x) == department)
-                            ]
-                            if not payroll_matches.empty:
-                                print(f"       Matching payroll rows ({len(payroll_matches)}):")
-                                for idx, match_row in payroll_matches.head(3).iterrows():
-                                    print(f"         Row {idx}: {match_row.to_dict()}")
-                                if len(payroll_matches) > 3:
-                                    print(f"         ... and {len(payroll_matches) - 3} more rows")
-                            
-                            # Find matching rows in revenue dataframe (if available)
-                            if not revenue_dataframe.empty:
-                                revenue_dept_col = get_col(revenue_dataframe, CandidateColumns.department)
-                                if revenue_dept_col:
-                                    revenue_matches = revenue_dataframe[
-                                        revenue_dataframe[revenue_dept_col].apply(lambda x: trim_dept_code(x) == department)
-                                    ]
-                                    if not revenue_matches.empty:
-                                        print(f"       Matching revenue rows ({len(revenue_matches)}):")
-                                        for idx, match_row in revenue_matches.head(3).iterrows():
-                                            print(f"         Row {idx}: {match_row.to_dict()}")
-                                        if len(revenue_matches) > 3:
-                                            print(f"         ... and {len(revenue_matches) - 3} more rows")
-                            
-                            department_code_to_title[department] = department
+                                
+                                # Find matching rows in payroll dataframe
+                                payroll_matches = payroll_dataframe[
+                                    payroll_dataframe[department_column].apply(lambda x: trim_dept_code(x) == department)
+                                ]
+                                if not payroll_matches.empty:
+                                    print(f"       Matching payroll rows ({len(payroll_matches)}):")
+                                    for idx, match_row in payroll_matches.head(3).iterrows():
+                                        print(f"         Row {idx}: {match_row.to_dict()}")
+                                    if len(payroll_matches) > 3:
+                                        print(f"         ... and {len(payroll_matches) - 3} more rows")
+                                
+                                # Find matching rows in revenue dataframe (if available)
+                                if not revenue_dataframe.empty:
+                                    revenue_dept_col = get_col(revenue_dataframe, CandidateColumns.department)
+                                    if revenue_dept_col:
+                                        revenue_matches = revenue_dataframe[
+                                            revenue_dataframe[revenue_dept_col].apply(lambda x: trim_dept_code(x) == department)
+                                        ]
+                                        if not revenue_matches.empty:
+                                            print(f"       Matching revenue rows ({len(revenue_matches)}):")
+                                            for idx, match_row in revenue_matches.head(3).iterrows():
+                                                print(f"         Row {idx}: {match_row.to_dict()}")
+                                            if len(revenue_matches) > 3:
+                                                print(f"         ... and {len(revenue_matches) - 3} more rows")
+                                
+                                department_code_to_title[department] = department
                         
                         # Calculate hours
                         hours_worked = (end_time - start_time).total_seconds() / 3600.0
