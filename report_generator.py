@@ -7,7 +7,8 @@ import os
 import pandas as pd
 import xlsxwriter
 from datetime import datetime, timedelta
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from db_connection import DatabaseConnection
 from stored_procedures import StoredProcedures
@@ -32,6 +33,197 @@ class ReportGenerator:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             print(f"✓ Created output directory: {output_dir}")
+    
+    def _execute_sp_with_connection(self, 
+                                    sp_func_name: str,
+                                    *args, 
+                                    **kwargs) -> Tuple[str, Optional[pd.DataFrame], Optional[Exception]]:
+        """
+        Execute a stored procedure with its own database connection (thread-safe).
+        
+        Args:
+            sp_func_name: Name of the stored procedure method to call
+            *args: Positional arguments for the SP method
+            **kwargs: Keyword arguments for the SP method
+            
+        Returns:
+            Tuple of (data_key, dataframe, error)
+            - data_key: Key to store the result in data_store
+            - dataframe: Result DataFrame or None if error
+            - error: Exception object or None if successful
+        """
+        try:
+            with DatabaseConnection() as conn:
+                stored_procedures = StoredProcedures(conn)
+                sp_method = getattr(stored_procedures, sp_func_name)
+                result = sp_method(*args, **kwargs)
+                return (sp_func_name, result, None)
+        except Exception as e:
+            return (sp_func_name, None, e)
+    
+    def _fetch_range_data_parallel(self,
+                                   range_name: str,
+                                   start: datetime,
+                                   end: datetime,
+                                   db_name: str,
+                                   group_num: int,
+                                   resort_name: str,
+                                   is_current_date: bool,
+                                   debug: Any) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch all data for a single date range in parallel.
+        
+        Args:
+            range_name: Name of the date range
+            start: Start datetime
+            end: End datetime
+            db_name: Database name
+            group_num: Group number
+            resort_name: Resort name
+            is_current_date: Whether this is current date (affects payroll fetching)
+            debug: Debug mode flag
+            
+        Returns:
+            Dictionary with keys: 'revenue', 'payroll', 'visits', 'snow', 'payroll_history'
+        """
+        result = {
+            'revenue': pd.DataFrame(),
+            'payroll': pd.DataFrame(),
+            'visits': pd.DataFrame(),
+            'snow': pd.DataFrame(),
+            'payroll_history': pd.DataFrame()
+        }
+        
+        # Determine if we need to fetch payroll history
+        should_fetch_history = False
+        history_start = start
+        history_end = end
+        
+        if not is_current_date:
+            if range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                days_in_range = (end - start).days + 1
+                if days_in_range > 7:
+                    history_end = end - timedelta(days=7)
+                    should_fetch_history = True
+        
+        # Prepare tasks for parallel execution
+        tasks = []
+        
+        # Revenue - always fetched
+        tasks.append(('revenue', 'execute_revenue', (db_name, group_num, start, end), {}))
+        
+        # Payroll - skip if current date
+        if not is_current_date:
+            tasks.append(('payroll', 'execute_payroll', (resort_name, start, end), {}))
+        else:
+            result['payroll'] = pd.DataFrame()  # Set empty for current date
+        
+        # Visits - always fetched
+        tasks.append(('visits', 'execute_visits', (resort_name, start, end), {}))
+        
+        # Weather/Snow - always fetched
+        tasks.append(('snow', 'execute_weather', (resort_name, start, end), {}))
+        
+        # Payroll History - conditional
+        if should_fetch_history:
+            tasks.append(('payroll_history', 'execute_payroll_history', (resort_name, history_start, history_end), {}))
+        else:
+            result['payroll_history'] = pd.DataFrame()  # Set empty if not needed
+        
+        # Execute all tasks in parallel
+        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            # Submit all tasks
+            future_to_key = {}
+            for key, sp_func, args, kwargs in tasks:
+                future = executor.submit(self._execute_sp_with_connection, sp_func, *args, **kwargs)
+                future_to_key[future] = key
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_key):
+                key = future_to_key[future]
+                try:
+                    sp_func_name, dataframe, error = future.result()
+                    
+                    if error:
+                        print(f"      ❌ Error fetching {key} for {range_name}: {error}")
+                        # Set empty DataFrame on error to prevent crashes
+                        result[key] = pd.DataFrame()
+                    else:
+                        result[key] = dataframe if dataframe is not None else pd.DataFrame()
+                        
+                        # Debug output
+                        if debug == 'verbose':
+                            print(f"      [DEBUG VERBOSE] {key.capitalize()} data for {range_name} (complete):")
+                            print(f"      {result[key]}")
+                        elif debug == 'simple':
+                            print(f"      [DEBUG SIMPLE] {key.capitalize()} data for {range_name} (top 5 rows):")
+                            print(f"      {result[key].head(5) if not result[key].empty else 'Empty DataFrame'}")
+                except Exception as e:
+                    print(f"      ❌ Unexpected error processing {key} for {range_name}: {e}")
+                    result[key] = pd.DataFrame()
+        
+        return result
+    
+    def _fetch_all_ranges_parallel(self,
+                                   range_names: list,
+                                   ranges: Dict[str, Tuple[datetime, datetime]],
+                                   db_name: str,
+                                   group_num: int,
+                                   resort_name: str,
+                                   is_current_date: bool,
+                                   debug: Any) -> Dict[str, Dict[str, pd.DataFrame]]:
+        """
+        Fetch data for all date ranges in parallel.
+        
+        Args:
+            range_names: List of range names
+            ranges: Dictionary mapping range names to (start, end) tuples
+            db_name: Database name
+            group_num: Group number
+            resort_name: Resort name
+            is_current_date: Whether this is current date
+            debug: Debug mode flag
+            
+        Returns:
+            Dictionary mapping range_name to data dictionary
+        """
+        data_store = {}
+        
+        # Execute all ranges in parallel
+        with ThreadPoolExecutor(max_workers=len(range_names)) as executor:
+            # Submit all range tasks
+            future_to_range = {}
+            for range_name in range_names:
+                start, end = ranges[range_name]
+                print(f"   ⏳ Fetching data for {range_name} ({start.date()} - {end.date()})...")
+                future = executor.submit(
+                    self._fetch_range_data_parallel,
+                    range_name, start, end, db_name, group_num, 
+                    resort_name, is_current_date, debug
+                )
+                future_to_range[future] = range_name
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_range):
+                range_name = future_to_range[future]
+                try:
+                    range_data = future.result()
+                    data_store[range_name] = range_data
+                    print(f"   ✓ Completed {range_name}")
+                except Exception as e:
+                    print(f"   ❌ Error processing {range_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Set empty data structure on error
+                    data_store[range_name] = {
+                        'revenue': pd.DataFrame(),
+                        'payroll': pd.DataFrame(),
+                        'visits': pd.DataFrame(),
+                        'snow': pd.DataFrame(),
+                        'payroll_history': pd.DataFrame()
+                    }
+        
+        return data_store
             
     def generate_comprehensive_report(self, 
                                     resort_config: Dict[str, Any], 
@@ -108,10 +300,8 @@ class ReportGenerator:
             "For Winter Ending (Prior Year)"
         ]
         
-        # 2. Fetch Data for all ranges
-        data_store = {name: {} for name in range_names}
-        
-        # Fetch salary payroll data once (rate_per_day per department)
+        # 2. Fetch Data for all ranges (PARALLELIZED)
+        # Fetch salary payroll data once (rate_per_day per department) - sequential (only 1 call)
         salary_payroll_data = None
         
         with DatabaseConnection() as conn:
@@ -131,95 +321,20 @@ class ReportGenerator:
             else:
                 print(f"   ⏭️  Skipping salary payroll data fetch (current date - payroll will be 0)")
                 salary_payroll_data = None
-            
-            for range_name in range_names:
-                start, end = ranges[range_name]
-                print(f"   ⏳ Fetching data for {range_name} ({start.date()} - {end.date()})...")
-                
-                # Revenue
-                revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
-                data_store[range_name]['revenue'] = revenue_dataframe
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Revenue data for {range_name} (complete):")
-                    print(f"      {revenue_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Revenue data for {range_name} (top 5 rows):")
-                    print(f"      {revenue_dataframe.head(5) if not revenue_dataframe.empty else 'Empty DataFrame'}")
-                
-                # Payroll - skip if current date
-                if not is_current_date:
-                    payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
-                    data_store[range_name]['payroll'] = payroll_dataframe
-                    if debug == 'verbose':
-                        print(f"      [DEBUG VERBOSE] Payroll data for {range_name} (complete):")
-                        print(f"      {payroll_dataframe}")
-                    elif debug == 'simple':
-                        print(f"      [DEBUG SIMPLE] Payroll data for {range_name} (top 5 rows):")
-                        print(f"      {payroll_dataframe.head(5) if not payroll_dataframe.empty else 'Empty DataFrame'}")
-                else:
-                    # Set empty DataFrame for payroll when current date
-                    data_store[range_name]['payroll'] = pd.DataFrame()
-                    if debug in ['simple', 'verbose']:
-                        print(f"      [DEBUG] Skipping payroll fetch for {range_name} (current date - payroll will be 0)")
-                
-                # Visits
-                visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
-                data_store[range_name]['visits'] = visits_dataframe
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Visits data for {range_name} (complete):")
-                    print(f"      {visits_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Visits data for {range_name} (top 5 rows):")
-                    print(f"      {visits_dataframe.head(5) if not visits_dataframe.empty else 'Empty DataFrame'}")
-                
-                # Weather/Snow
-                snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
-                data_store[range_name]['snow'] = snow_dataframe
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Snow data for {range_name} (complete):")
-                    print(f"      {snow_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Snow data for {range_name} (top 5 rows):")
-                    print(f"      {snow_dataframe.head(5) if not snow_dataframe.empty else 'Empty DataFrame'}")
-                
-                # Payroll History - skip if current date
-                if not is_current_date:
-                    # Payroll History - fetch for appropriate range
-                    # For Month to Date and Winter Ending (Actual), if range > 7 days, 
-                    # fetch history for range excluding recent 7 days
-                    # For ranges <= 7 days, we don't need history (use salary payroll for all days)
-                    history_start = start
-                    history_end = end
-                    should_fetch_history = True
-                    
-                    if range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                        days_in_range_temp = (end - start).days + 1
-                        if days_in_range_temp > 7:
-                            # Fetch history for range excluding recent 7 days
-                            history_end = end - timedelta(days=7)
-                        else:
-                            # Range is <= 7 days, no history needed (will use salary payroll for all days)
-                            should_fetch_history = False
-                    
-                    if should_fetch_history:
-                        history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, history_start, history_end)
-                        data_store[range_name]['payroll_history'] = history_payroll_dataframe
-                        if debug == 'verbose':
-                            print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}) (complete):")
-                            print(f"      {history_payroll_dataframe}")
-                        elif debug == 'simple':
-                            print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}) (top 5 rows):")
-                            print(f"      {history_payroll_dataframe.head(5) if not history_payroll_dataframe.empty else 'Empty DataFrame'}")
-                    else:
-                        # No history needed for this range
-                        data_store[range_name]['payroll_history'] = pd.DataFrame()
-                        if debug in ['simple', 'verbose']:
-                            print(f"      [DEBUG] Skipping payroll history for {range_name} (range <= 7 days, using salary payroll only)")
-                else:
-                    # No history needed for current date
-                    data_store[range_name]['payroll_history'] = pd.DataFrame()
-                    if debug in ['simple', 'verbose']:
-                        print(f"      [DEBUG] Skipping payroll history for {range_name} (current date - payroll will be 0)")
+        
+        # Fetch all date ranges in parallel (Level 2 parallelization)
+        # Each range will fetch its SP calls in parallel (Level 1 parallelization)
+        print(f"   🚀 Starting parallel data fetch for {len(range_names)} date ranges...")
+        data_store = self._fetch_all_ranges_parallel(
+            range_names=range_names,
+            ranges=ranges,
+            db_name=db_name,
+            group_num=group_num,
+            resort_name=resort_name,
+            is_current_date=is_current_date,
+            debug=debug
+        )
+        print(f"   ✓ Completed parallel data fetch for all ranges")
 
         # 3. Process Data and Collect Row Headers
         all_locations = set()
