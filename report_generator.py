@@ -32,6 +32,114 @@ class ReportGenerator:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             print(f"✓ Created output directory: {output_dir}")
+    
+    def _sanitize_filename(self, name: str) -> str:
+        """Sanitize a string to be used as a filename"""
+        # Replace invalid characters with underscores
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            name = name.replace(char, '_')
+        # Remove leading/trailing spaces and dots
+        name = name.strip('. ')
+        return name
+    
+    def _export_sp_result(self, 
+                         dataframe: pd.DataFrame, 
+                         range_name: str, 
+                         sp_name: str, 
+                         resort_name: str) -> str:
+        """
+        Export a stored procedure result to an Excel file
+        
+        Args:
+            dataframe: DataFrame to export
+            range_name: Name of the date range (e.g., "For The Day (Actual)")
+            sp_name: Name of the stored procedure (e.g., "Revenue", "Payroll")
+            resort_name: Name of the resort
+            
+        Returns:
+            Path to saved Excel file
+        """
+        # Sanitize range name and SP name for filename
+        sanitized_range = self._sanitize_filename(range_name)
+        sanitized_sp = self._sanitize_filename(sp_name)
+        
+        # Create filename: RangeName_SPname.xlsx
+        filename = f"{sanitized_range}_{sanitized_sp}.xlsx"
+        filepath = os.path.join(self.output_dir, filename)
+        
+        # Sort by department/department code for Revenue and Payroll
+        if sp_name in ['Revenue', 'Payroll']:
+            # Find department column (case-insensitive search)
+            dept_col = None
+            dataframe_columns_lower = [col.lower() for col in dataframe.columns]
+            
+            for candidate in CandidateColumns.department:
+                # Try exact match first
+                if candidate in dataframe.columns:
+                    dept_col = candidate
+                    break
+                # Try case-insensitive match
+                candidate_lower = candidate.lower()
+                for idx, col_lower in enumerate(dataframe_columns_lower):
+                    if col_lower == candidate_lower:
+                        dept_col = dataframe.columns[idx]
+                        break
+                if dept_col:
+                    break
+            
+            # If still no department column found, try department title as fallback
+            if not dept_col:
+                for candidate in CandidateColumns.departmentTitle:
+                    if candidate in dataframe.columns:
+                        dept_col = candidate
+                        break
+                    # Try case-insensitive match
+                    candidate_lower = candidate.lower()
+                    for idx, col_lower in enumerate(dataframe_columns_lower):
+                        if col_lower == candidate_lower:
+                            dept_col = dataframe.columns[idx]
+                            break
+                    if dept_col:
+                        break
+            
+            if dept_col:
+                # Sort by department code/title (convert to string for consistent sorting)
+                dataframe_sorted = dataframe.copy()
+                dataframe_sorted['_sort_key'] = dataframe_sorted[dept_col].astype(str).str.strip()
+                dataframe_sorted = dataframe_sorted.sort_values(by='_sort_key', na_position='last')
+                dataframe_sorted = dataframe_sorted.drop(columns=['_sort_key'])
+            else:
+                dataframe_sorted = dataframe
+        else:
+            dataframe_sorted = dataframe
+        
+        # Write to Excel using xlsxwriter
+        workbook = xlsxwriter.Workbook(filepath)
+        worksheet = workbook.add_worksheet('Data')
+        
+        # Write header
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1})
+        for col_idx, col_name in enumerate(dataframe_sorted.columns):
+            worksheet.write(0, col_idx, col_name, header_format)
+        
+        # Write data
+        data_format = workbook.add_format({'border': 1})
+        for row_idx, (_, row) in enumerate(dataframe_sorted.iterrows(), start=1):
+            for col_idx, value in enumerate(row):
+                worksheet.write(row_idx, col_idx, value, data_format)
+        
+        # Auto-adjust column widths
+        for col_idx, col_name in enumerate(dataframe_sorted.columns):
+            # Get max width of column
+            max_width = len(str(col_name))
+            for _, row in dataframe_sorted.iterrows():
+                max_width = max(max_width, len(str(row[col_name])))
+            worksheet.set_column(col_idx, col_idx, min(max_width + 2, 50))
+        
+        workbook.close()
+        
+        return filepath
             
     def generate_comprehensive_report(self, 
                                     resort_config: Dict[str, Any], 
@@ -122,6 +230,10 @@ class ReportGenerator:
             if not is_current_date:
                 print(f"   ⏳ Fetching salary payroll data for {resort_name}...")
                 salary_payroll_data = stored_procedures.execute_payroll_salary(resort_name)
+                # Export Salary Payroll SP result (not range-specific, so use a generic range name)
+                if not salary_payroll_data.empty:
+                    export_path = self._export_sp_result(salary_payroll_data, "SalaryPayroll", "PayrollSalary", resort_name)
+                    print(f"      💾 Exported Salary Payroll data: {os.path.basename(export_path)}")
                 if debug == 'verbose':
                     print(f"      [DEBUG VERBOSE] Salary payroll data (complete):")
                     print(f"      {salary_payroll_data}")
@@ -139,6 +251,10 @@ class ReportGenerator:
                 # Revenue
                 revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
                 data_store[range_name]['revenue'] = revenue_dataframe
+                # Export Revenue SP result
+                if not revenue_dataframe.empty:
+                    export_path = self._export_sp_result(revenue_dataframe, range_name, "Revenue", resort_name)
+                    print(f"      💾 Exported Revenue data: {os.path.basename(export_path)}")
                 if debug == 'verbose':
                     print(f"      [DEBUG VERBOSE] Revenue data for {range_name} (complete):")
                     print(f"      {revenue_dataframe}")
@@ -150,6 +266,10 @@ class ReportGenerator:
                 if not is_current_date:
                     payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
                     data_store[range_name]['payroll'] = payroll_dataframe
+                    # Export Payroll SP result
+                    if not payroll_dataframe.empty:
+                        export_path = self._export_sp_result(payroll_dataframe, range_name, "Payroll", resort_name)
+                        print(f"      💾 Exported Payroll data: {os.path.basename(export_path)}")
                     if debug == 'verbose':
                         print(f"      [DEBUG VERBOSE] Payroll data for {range_name} (complete):")
                         print(f"      {payroll_dataframe}")
@@ -165,6 +285,10 @@ class ReportGenerator:
                 # Visits
                 visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
                 data_store[range_name]['visits'] = visits_dataframe
+                # Export Visits SP result
+                if not visits_dataframe.empty:
+                    export_path = self._export_sp_result(visits_dataframe, range_name, "Visits", resort_name)
+                    print(f"      💾 Exported Visits data: {os.path.basename(export_path)}")
                 if debug == 'verbose':
                     print(f"      [DEBUG VERBOSE] Visits data for {range_name} (complete):")
                     print(f"      {visits_dataframe}")
@@ -175,6 +299,10 @@ class ReportGenerator:
                 # Weather/Snow
                 snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
                 data_store[range_name]['snow'] = snow_dataframe
+                # Export Weather/Snow SP result
+                if not snow_dataframe.empty:
+                    export_path = self._export_sp_result(snow_dataframe, range_name, "Weather", resort_name)
+                    print(f"      💾 Exported Weather data: {os.path.basename(export_path)}")
                 if debug == 'verbose':
                     print(f"      [DEBUG VERBOSE] Snow data for {range_name} (complete):")
                     print(f"      {snow_dataframe}")
@@ -204,6 +332,10 @@ class ReportGenerator:
                     if should_fetch_history:
                         history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, history_start, history_end)
                         data_store[range_name]['payroll_history'] = history_payroll_dataframe
+                        # Export Payroll History SP result
+                        if not history_payroll_dataframe.empty:
+                            export_path = self._export_sp_result(history_payroll_dataframe, range_name, "PayrollHistory", resort_name)
+                            print(f"      💾 Exported Payroll History data: {os.path.basename(export_path)}")
                         if debug == 'verbose':
                             print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({history_start.date()} - {history_end.date()}) (complete):")
                             print(f"      {history_payroll_dataframe}")
