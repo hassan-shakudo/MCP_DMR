@@ -127,7 +127,11 @@ class ReportGenerator:
         data_format = workbook.add_format({'border': 1})
         for row_idx, (_, row) in enumerate(dataframe_sorted.iterrows(), start=1):
             for col_idx, value in enumerate(row):
-                worksheet.write(row_idx, col_idx, value, data_format)
+                # Handle NaT (Not a Time) values - convert to None/empty string
+                if pd.isna(value):
+                    worksheet.write(row_idx, col_idx, None, data_format)
+                else:
+                    worksheet.write(row_idx, col_idx, value, data_format)
         
         # Auto-adjust column widths
         for col_idx, col_name in enumerate(dataframe_sorted.columns):
