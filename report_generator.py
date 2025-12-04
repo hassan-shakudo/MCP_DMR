@@ -551,17 +551,31 @@ class ReportGenerator:
                             department_code_to_title[department_string] = department_string
 
             # --- Payroll ---
+            # Initialize tracking variables
+            calculated_payroll = {}  # department -> calculated wages
+            contract_payroll_rows = {}  # department -> list of employee rows
+            salary_totals_by_dept = {}  # dept_code -> salary_total_for_range
+            recent_week_salary_by_dept = {}  # dept_code -> recent_week_salary (for ranges > 7 days)
+            rest_range_salary_by_dept = {}  # dept_code -> rest_range_salary (for ranges > 7 days)
+            history_payroll = {}  # department -> total from history
+            
+            # Get date range info (needed for logging)
+            start_date, end_date = ranges[range_name]
+            days_in_range = calculate_days_in_range(start_date, end_date)
+            
             # Skip payroll processing if current date (payroll will be set to 0)
             if is_current_date:
                 # Set all payroll values to 0 for all departments found in revenue
                 for dept_code in processed_revenue[range_name].keys():
                     processed_payroll[range_name][dept_code] = 0.0
                     all_departments.add(dept_code)
+                    # Initialize tracking for logging
+                    calculated_payroll[dept_code] = 0.0
+                    salary_totals_by_dept[dept_code] = 0.0
+                    history_payroll[dept_code] = 0.0
             else:
                 # Step 1: Calculate regular payroll (contract-based employees)
                 payroll_dataframe = data_store[range_name]['payroll']
-                calculated_payroll = {}  # department -> calculated wages
-                contract_payroll_rows = {}  # department -> list of employee rows
                 
                 if not payroll_dataframe.empty:
                     # Need columns: Department, start_punchtime, end_punchtime, rate
@@ -669,7 +683,6 @@ class ReportGenerator:
                 
                 # Step 2: Process history payroll data
                 history_payroll_dataframe = data_store[range_name]['payroll_history']
-                history_payroll = {}  # department -> total from history
                 if history_payroll_dataframe is not None and not history_payroll_dataframe.empty:
                     history_dept_column = get_col(history_payroll_dataframe, CandidateColumns.historyDepartment) or 'department'
                     history_total_column = get_col(history_payroll_dataframe, CandidateColumns.historyTotal)
@@ -681,16 +694,7 @@ class ReportGenerator:
                             if dept_code:
                                 history_payroll[dept_code] = total
                 
-                # Step 3: Get date range info
-                start_date, end_date = ranges[range_name]
-                days_in_range = calculate_days_in_range(start_date, end_date)
-                
-                # Track salary totals for logging
-                salary_totals_by_dept = {}  # dept_code -> salary_total_for_range
-                recent_week_salary_by_dept = {}  # dept_code -> recent_week_salary (for ranges > 7 days)
-                rest_range_salary_by_dept = {}  # dept_code -> rest_range_salary (for ranges > 7 days)
-                
-                # Step 4: Apply salary payroll logic based on range type
+                # Step 3: Apply salary payroll logic based on range type
                 if range_name == "For The Day (Actual)":
                     # For The Day (Actual): calculated payroll + salaryPayrollRatePerDay
                     for dept_code, calculated_wages in calculated_payroll.items():
@@ -789,78 +793,82 @@ class ReportGenerator:
                             salary_totals_by_dept[dept_code] = 0.0  # No salary for prior year
                             processed_payroll[range_name][dept_code] = normalize_value(history_total)
                             all_departments.add(dept_code)
-                
-                # Step 5: Log detailed payroll breakdown for each department
-                print(f"\n{'='*80}")
-                print(f"  📊 PAYROLL CALCULATION BREAKDOWN - {range_name}")
-                print(f"{'='*80}")
-                
-                # Get all departments that have payroll data
-                all_payroll_depts = set(processed_payroll[range_name].keys())
-                
-                if not all_payroll_depts:
-                    print(f"    No payroll data found for this range.")
-                else:
-                    for dept_code in sorted(all_payroll_depts):
-                        dept_title = department_code_to_title.get(dept_code, dept_code)
-                        print(f"\n  📁 Department: {dept_code} ({dept_title})")
-                        print(f"     {'─'*76}")
-                        
-                        # Contract Payroll Details
-                        contract_rows = contract_payroll_rows.get(dept_code, [])
-                        contract_total = normalize_value(calculated_payroll.get(dept_code, 0))
-                        
-                        print(f"     📋 Contract Payroll (Hourly Employees):")
-                        if contract_rows:
-                            print(f"        • Employee rows received: {len(contract_rows)}")
-                            for idx, row_data in enumerate(contract_rows, 1):
-                                print(f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
-                                      f"Hours={row_data['hours_worked']:.2f}, Rate=${row_data['rate']:.2f}, "
-                                      f"Wages=${row_data['wages']:.2f}")
-                            print(f"        • Aggregated Contract Payroll Total: ${contract_total:,.2f}")
-                        else:
-                            print(f"        • No contract payroll rows found")
-                            print(f"        • Aggregated Contract Payroll Total: $0.00")
-                        
-                        # Salary Payroll Details
-                        salary_rate = salary_payroll_rates.get(dept_code, 0)
-                        salary_total = salary_totals_by_dept.get(dept_code, 0)
-                        
-                        print(f"\n     💰 Salary Payroll:")
-                        print(f"        • Daily Salary Rate: ${salary_rate:,.2f}")
-                        
-                        # Show salary total based on range type
-                        if range_name == "For The Day (Actual)":
-                            print(f"        • Salary for Range (1 day): ${salary_total:,.2f}")
-                        elif range_name == "For The Week Ending (Actual)":
+            
+            # Step 5: Log detailed payroll breakdown for each department (always execute)
+            print(f"\n{'='*80}")
+            print(f"  📊 PAYROLL CALCULATION BREAKDOWN - {range_name}")
+            if is_current_date:
+                print(f"  ⚠️  NOTE: Current date - payroll set to 0 for all departments")
+            print(f"{'='*80}")
+            
+            # Get all departments that have payroll data
+            all_payroll_depts = set(processed_payroll[range_name].keys())
+            
+            if not all_payroll_depts:
+                print(f"    No payroll data found for this range.")
+            else:
+                for dept_code in sorted(all_payroll_depts):
+                    dept_title = department_code_to_title.get(dept_code, dept_code)
+                    print(f"\n  📁 Department: {dept_code} ({dept_title})")
+                    print(f"     {'─'*76}")
+                    
+                    # Contract Payroll Details
+                    contract_rows = contract_payroll_rows.get(dept_code, [])
+                    contract_total = normalize_value(calculated_payroll.get(dept_code, 0))
+                    
+                    print(f"     📋 Contract Payroll (Hourly Employees):")
+                    if contract_rows:
+                        print(f"        • Employee rows received: {len(contract_rows)}")
+                        for idx, row_data in enumerate(contract_rows, 1):
+                            print(f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
+                                  f"Hours={row_data['hours_worked']:.2f}, Rate=${row_data['rate']:.2f}, "
+                                  f"Wages=${row_data['wages']:.2f}")
+                        print(f"        • Aggregated Contract Payroll Total: ${contract_total:,.2f}")
+                    else:
+                        print(f"        • No contract payroll rows found")
+                        print(f"        • Aggregated Contract Payroll Total: $0.00")
+                    
+                    # Salary Payroll Details
+                    salary_rate = salary_payroll_rates.get(dept_code, 0)
+                    salary_total = salary_totals_by_dept.get(dept_code, 0)
+                    
+                    print(f"\n     💰 Salary Payroll:")
+                    print(f"        • Daily Salary Rate: ${salary_rate:,.2f}")
+                    
+                    # Show salary total based on range type
+                    if is_current_date:
+                        print(f"        • Salary for Range: $0.00 (Current date - not calculated)")
+                    elif range_name == "For The Day (Actual)":
+                        print(f"        • Salary for Range (1 day): ${salary_total:,.2f}")
+                    elif range_name == "For The Week Ending (Actual)":
+                        print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
+                    elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                        if days_in_range <= 7:
                             print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
-                        elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                            if days_in_range <= 7:
-                                print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
-                            else:
-                                recent_salary = recent_week_salary_by_dept.get(dept_code, 0)
-                                rest_salary = rest_range_salary_by_dept.get(dept_code, 0)
-                                print(f"        • Recent 7 Days Salary: ${recent_salary:,.2f}")
-                                print(f"        • Rest of Range Salary (from history): ${rest_salary:,.2f}")
-                                print(f"        • Total Salary for Range: ${salary_total:,.2f}")
                         else:
-                            # Prior Year ranges don't use salary payroll
-                            print(f"        • Salary for Range: $0.00 (Prior Year - not applicable)")
-                        
-                        # History Payroll Details
-                        history_total = normalize_value(history_payroll.get(dept_code, 0))
-                        print(f"\n     📜 History Payroll:")
-                        if history_total > 0:
-                            print(f"        • Historical Payroll Total: ${history_total:,.2f}")
-                        else:
-                            print(f"        • No history payroll data found")
-                        
-                        # Final Total
-                        final_total = normalize_value(processed_payroll[range_name].get(dept_code, 0))
-                        print(f"\n     ✅ FINAL PAYROLL TOTAL: ${final_total:,.2f}")
-                        print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
-                
-                print(f"\n{'='*80}\n")
+                            recent_salary = recent_week_salary_by_dept.get(dept_code, 0)
+                            rest_salary = rest_range_salary_by_dept.get(dept_code, 0)
+                            print(f"        • Recent 7 Days Salary: ${recent_salary:,.2f}")
+                            print(f"        • Rest of Range Salary (from history): ${rest_salary:,.2f}")
+                            print(f"        • Total Salary for Range: ${salary_total:,.2f}")
+                    else:
+                        # Prior Year ranges don't use salary payroll
+                        print(f"        • Salary for Range: $0.00 (Prior Year - not applicable)")
+                    
+                    # History Payroll Details
+                    history_total = normalize_value(history_payroll.get(dept_code, 0))
+                    print(f"\n     📜 History Payroll:")
+                    if history_total > 0:
+                        print(f"        • Historical Payroll Total: ${history_total:,.2f}")
+                    else:
+                        print(f"        • No history payroll data found")
+                    
+                    # Final Total
+                    final_total = normalize_value(processed_payroll[range_name].get(dept_code, 0))
+                    print(f"\n     ✅ FINAL PAYROLL TOTAL: ${final_total:,.2f}")
+                    print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
+            
+            print(f"\n{'='*80}\n")
 
         # Debug: Print final department code to title mapping (shown in both simple and verbose modes)
         if debug in ['simple', 'verbose']:
