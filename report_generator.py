@@ -779,20 +779,13 @@ class ReportGenerator:
                             all_departments.add(dept_code)
                 
                 else:
-                    # All Prior Year ranges: calculated payroll + historyPayrollDeptTotal
-                    # Prior Year ranges don't use salary payroll
-                    for dept_code, calculated_wages in calculated_payroll.items():
-                        history_total = history_payroll.get(dept_code, 0)
-                        salary_totals_by_dept[dept_code] = 0.0  # No salary for prior year
-                        total_payroll = normalize_value(calculated_wages) + normalize_value(history_total)
-                        processed_payroll[range_name][dept_code] = total_payroll
-                    
-                    # Add departments that only have history payroll
+                    # All Prior Year ranges: ONLY use history payroll (ignore contract employees)
+                    # Prior Year ranges don't use salary payroll or contract payroll
                     for dept_code, history_total in history_payroll.items():
-                        if dept_code not in processed_payroll[range_name]:
-                            salary_totals_by_dept[dept_code] = 0.0  # No salary for prior year
-                            processed_payroll[range_name][dept_code] = normalize_value(history_total)
-                            all_departments.add(dept_code)
+                        salary_totals_by_dept[dept_code] = 0.0  # No salary for prior year
+                        # Only use history payroll, ignore calculated_payroll (contract employees)
+                        processed_payroll[range_name][dept_code] = normalize_value(history_total)
+                        all_departments.add(dept_code)
             
             # Step 5: Log detailed payroll breakdown for each department (always execute)
             print(f"\n{'='*80}")
@@ -816,8 +809,15 @@ class ReportGenerator:
                     contract_rows = contract_payroll_rows.get(dept_code, [])
                     contract_total = normalize_value(calculated_payroll.get(dept_code, 0))
                     
+                    # Check if this is a Prior Year range
+                    is_prior_year = range_name not in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                                       "Month to Date (Actual)", "For Winter Ending (Actual)"]
+                    
                     print(f"     📋 Contract Payroll (Hourly Employees):")
-                    if contract_rows:
+                    if is_prior_year:
+                        print(f"        • Prior Year Range - Contract Payroll NOT USED (ignored)")
+                        print(f"        • Only History Payroll is used for Prior Year ranges")
+                    elif contract_rows:
                         print(f"        • Employee rows received: {len(contract_rows)}")
                         for idx, row_data in enumerate(contract_rows, 1):
                             print(f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
@@ -866,7 +866,12 @@ class ReportGenerator:
                     # Final Total
                     final_total = normalize_value(processed_payroll[range_name].get(dept_code, 0))
                     print(f"\n     ✅ FINAL PAYROLL TOTAL: ${final_total:,.2f}")
-                    print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
+                    
+                    # Show breakdown based on range type
+                    if is_prior_year:
+                        print(f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll")
+                    else:
+                        print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
             
             print(f"\n{'='*80}\n")
 
