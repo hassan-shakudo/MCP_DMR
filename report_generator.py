@@ -317,20 +317,20 @@ class ReportGenerator:
                 # Payroll History - skip if current date
                 if not is_current_date:
                     # Payroll History - fetch for appropriate range
-                    # For Month to Date and Winter Ending (Actual), if range > 7 days, 
-                    # fetch history for range excluding recent 7 days
-                    # For ranges <= 7 days, we don't need history (use salary payroll for all days)
+                    # For Month to Date and Winter Ending (Actual), if range > 15 days, 
+                    # fetch history for range excluding recent 15 days
+                    # For ranges <= 15 days, we don't need history (use salary payroll for all days)
                     history_start = start
                     history_end = end
                     should_fetch_history = True
                     
                     if range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
                         days_in_range_temp = (end - start).days + 1
-                        if days_in_range_temp > 7:
-                            # Fetch history for range excluding recent 7 days
-                            history_end = end - timedelta(days=7)
+                        if days_in_range_temp > 15:
+                            # Fetch history for range excluding recent 15 days
+                            history_end = end - timedelta(days=15)
                         else:
-                            # Range is <= 7 days, no history needed (will use salary payroll for all days)
+                            # Range is <= 15 days, no history needed (will use salary payroll for all days)
                             should_fetch_history = False
                     
                     if should_fetch_history:
@@ -350,7 +350,7 @@ class ReportGenerator:
                         # No history needed for this range
                         data_store[range_name]['payroll_history'] = pd.DataFrame()
                         if debug in ['simple', 'verbose']:
-                            print(f"      [DEBUG] Skipping payroll history for {range_name} (range <= 7 days, using salary payroll only)")
+                            print(f"      [DEBUG] Skipping payroll history for {range_name} (range <= 15 days, using salary payroll only)")
                 else:
                     # No history needed for current date
                     data_store[range_name]['payroll_history'] = pd.DataFrame()
@@ -555,8 +555,8 @@ class ReportGenerator:
             calculated_payroll = {}  # department -> calculated wages
             contract_payroll_rows = {}  # department -> list of employee rows
             salary_totals_by_dept = {}  # dept_code -> salary_total_for_range
-            recent_week_salary_by_dept = {}  # dept_code -> recent_week_salary (for ranges > 7 days)
-            rest_range_salary_by_dept = {}  # dept_code -> rest_range_salary (for ranges > 7 days)
+            recent_week_salary_by_dept = {}  # dept_code -> recent_15_days_salary (for ranges > 15 days)
+            rest_range_salary_by_dept = {}  # dept_code -> rest_range_payroll (for ranges > 15 days, from history SP)
             history_payroll = {}  # department -> total from history
             
             # Get date range info (needed for logging)
@@ -731,14 +731,14 @@ class ReportGenerator:
                 
                 elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
                     # For Month to Date and Winter Ending (Actual):
-                    # If range is <= 7 days: calculated payroll + (salaryPayrollRatePerDay × days_in_range)
-                    # If range is > 7 days: 
-                    #   - recent week salary payroll = salaryPayrollRatePerDay × 7
-                    #   - RestDateRangeSalaryPayroll = history payroll for range excluding recent 7 days
-                    #   - Total = Calculated Payroll + recent week salary payroll + RestDateRangeSalaryPayroll
+                    # If range is <= 15 days: calculated payroll + (salaryPayrollRatePerDay × days_in_range)
+                    # If range is > 15 days: 
+                    #   - Recent 15 days: (Active Salary SP rate × 15) + Payroll SP aggregated result
+                    #   - Rest Range: History SP (already includes both salary and payroll, no additions needed)
+                    #   - Total = Recent 15 days Payroll + Rest Range
                     
-                    if days_in_range <= 7:
-                        # Entire range is within 7 days - use salary rate for all days (no history needed)
+                    if days_in_range <= 15:
+                        # Entire range is within 15 days - use salary rate for all days (no history needed)
                         for dept_code, calculated_wages in calculated_payroll.items():
                             salary_rate = salary_payroll_rates.get(dept_code, 0)
                             salary_total = normalize_value(salary_rate) * days_in_range
@@ -754,27 +754,34 @@ class ReportGenerator:
                                 processed_payroll[range_name][dept_code] = salary_total
                                 all_departments.add(dept_code)
                     else:
-                        # Range is > 7 days - use recent 7 days salary + history for the rest
-                        # Calculate recent 7 days salary payroll
-                        recent_week_salary_payroll = {}
+                        # Range is > 15 days - use recent 15 days salary + contract payroll + history for the rest
+                        # Recent 15 days: (Active Salary SP rate × 15) + Payroll SP aggregated result
+                        recent_15_days_salary_payroll = {}
                         for dept_code, salary_rate in salary_payroll_rates.items():
-                            recent_salary = normalize_value(salary_rate) * 7
-                            recent_week_salary_payroll[dept_code] = recent_salary
+                            recent_salary = normalize_value(salary_rate) * 15
+                            recent_15_days_salary_payroll[dept_code] = recent_salary
                             recent_week_salary_by_dept[dept_code] = recent_salary
                         
-                        # Rest of range salary payroll from history (already fetched for adjusted range)
-                        rest_range_salary_payroll = {k: normalize_value(v) for k, v in history_payroll.items()}
-                        rest_range_salary_by_dept = rest_range_salary_payroll.copy()
+                        # Rest of range from history (already includes both salary and payroll, no additions needed)
+                        rest_range_payroll = {k: normalize_value(v) for k, v in history_payroll.items()}
+                        rest_range_salary_by_dept = rest_range_payroll.copy()
                         
                         # Combine all payroll components
-                        all_dept_codes = set(calculated_payroll.keys()) | set(recent_week_salary_payroll.keys()) | set(rest_range_salary_payroll.keys())
+                        # Recent 15 days total = contract payroll + (salary rate × 15)
+                        # Rest range = history payroll (already complete)
+                        # Total = Recent 15 days total + Rest range
+                        all_dept_codes = set(calculated_payroll.keys()) | set(recent_15_days_salary_payroll.keys()) | set(rest_range_payroll.keys())
                         for dept_code in all_dept_codes:
                             calculated_wages = normalize_value(calculated_payroll.get(dept_code, 0))
-                            recent_salary = recent_week_salary_payroll.get(dept_code, 0)
-                            rest_salary = rest_range_salary_payroll.get(dept_code, 0)
-                            salary_total = recent_salary + rest_salary
-                            salary_totals_by_dept[dept_code] = salary_total
-                            total_payroll = calculated_wages + recent_salary + rest_salary
+                            recent_salary = recent_15_days_salary_payroll.get(dept_code, 0)
+                            rest_payroll = rest_range_payroll.get(dept_code, 0)
+                            
+                            # Recent 15 days payroll = contract + salary
+                            recent_15_days_total = calculated_wages + recent_salary
+                            salary_totals_by_dept[dept_code] = recent_salary  # Only track recent 15 days salary
+                            
+                            # Total = Recent 15 days + Rest range (history already includes both salary and payroll)
+                            total_payroll = recent_15_days_total + rest_payroll
                             processed_payroll[range_name][dept_code] = total_payroll
                             all_departments.add(dept_code)
                 
@@ -843,14 +850,14 @@ class ReportGenerator:
                     elif range_name == "For The Week Ending (Actual)":
                         print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
                     elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                        if days_in_range <= 7:
+                        if days_in_range <= 15:
                             print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
                         else:
                             recent_salary = recent_week_salary_by_dept.get(dept_code, 0)
-                            rest_salary = rest_range_salary_by_dept.get(dept_code, 0)
-                            print(f"        • Recent 7 Days Salary: ${recent_salary:,.2f}")
-                            print(f"        • Rest of Range Salary (from history): ${rest_salary:,.2f}")
-                            print(f"        • Total Salary for Range: ${salary_total:,.2f}")
+                            rest_payroll = rest_range_salary_by_dept.get(dept_code, 0)
+                            print(f"        • Recent 15 Days Salary: ${recent_salary:,.2f}")
+                            print(f"        • Rest of Range Payroll (from history - includes both salary and payroll): ${rest_payroll:,.2f}")
+                            print(f"        • Total Salary for Recent 15 Days: ${salary_total:,.2f}")
                     else:
                         # Prior Year ranges don't use salary payroll
                         print(f"        • Salary for Range: $0.00 (Prior Year - not applicable)")
@@ -870,6 +877,11 @@ class ReportGenerator:
                     # Show breakdown based on range type
                     if is_prior_year:
                         print(f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll")
+                    elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"] and days_in_range > 15:
+                        # For ranges > 15 days: Recent 15 days (Contract + Salary) + Rest Range (History)
+                        recent_15_days_total = contract_total + salary_total
+                        rest_payroll = rest_range_salary_by_dept.get(dept_code, 0)
+                        print(f"        Breakdown: Recent 15 Days (Contract ${contract_total:,.2f} + Salary ${salary_total:,.2f} = ${recent_15_days_total:,.2f}) + Rest Range History (${rest_payroll:,.2f})")
                     else:
                         print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
             
