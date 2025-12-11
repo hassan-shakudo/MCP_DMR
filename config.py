@@ -107,6 +107,8 @@ CandidateColumns = SimpleNamespace(
     payrollStartTime=['start_punchtime', 'StartPunchTime', 'StartTime'],
     payrollEndTime=['end_punchtime', 'EndPunchTime', 'EndTime'],
     payrollRate=['rate', 'Rate', 'HourlyRate'],
+    payrollHours=['hours', 'Hours', 'HoursWorked', 'hours_worked'],
+    payrollDollarAmount=['dollaramount', 'DollarAmount', 'dollar_amount', 'Dollar_Amount'],
     
     # Salary Payroll Data Columns
     salaryDeptcode=['deptcode', 'DeptCode', 'dept_code', 'Department', 'department'],

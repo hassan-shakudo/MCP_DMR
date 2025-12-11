@@ -268,46 +268,11 @@ class ReportGenerator:
                 
                 # Payroll - skip if current date
                 if not is_current_date:
-                    # Check if range needs to be split (> 15 days for Month/Winter Ending Actual)
-                    days_in_range = (end - start).days + 1
-                    needs_split = (range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]) and (days_in_range > 15)
-                    
-                    if needs_split:
-                        # Split range: Recent 15 Days and Rest of Range
-                        recent_15_days_start = end - timedelta(days=14)  # 15 days inclusive: end - 14 days to end
-                        recent_15_days_start = recent_15_days_start.replace(hour=0, minute=0, second=0, microsecond=0)
-                        recent_15_days_end = end
-                        
-                        rest_of_range_start = start
-                        rest_of_range_end = end - timedelta(days=15)  # Up to (but not including) recent 15 days
-                        rest_of_range_end = rest_of_range_end.replace(hour=23, minute=59, second=59, microsecond=999999)
-                        
-                        print(f"      📅 Range split for {range_name}:")
-                        print(f"         • Recent 15 Days: {recent_15_days_start.date()} to {recent_15_days_end.date()}")
-                        print(f"         • Rest of Range: {rest_of_range_start.date()} to {rest_of_range_end.date()}")
-                        
-                        # Call Payroll SP with Recent 15 Days range only
-                        payroll_dataframe = stored_procedures.execute_payroll(resort_name, recent_15_days_start, recent_15_days_end)
-                        data_store[range_name]['payroll'] = payroll_dataframe
-                        data_store[range_name]['recent_15_days_range'] = (recent_15_days_start, recent_15_days_end)
-                        data_store[range_name]['rest_of_range'] = (rest_of_range_start, rest_of_range_end)
-                        
-                        # Export Payroll SP result
-                        if not payroll_dataframe.empty:
-                            export_path = self._export_sp_result(payroll_dataframe, range_name, "Payroll", resort_name)
-                            print(f"      💾 Exported Payroll data (Recent 15 Days): {os.path.basename(export_path)}")
-                        if debug == 'verbose':
-                            print(f"      [DEBUG VERBOSE] Payroll data for {range_name} - Recent 15 Days (complete):")
-                            print(f"      {payroll_dataframe}")
-                        elif debug == 'simple':
-                            print(f"      [DEBUG SIMPLE] Payroll data for {range_name} - Recent 15 Days (top 5 rows):")
-                            print(f"      {payroll_dataframe.head(5) if not payroll_dataframe.empty else 'Empty DataFrame'}")
-                    else:
-                        # Range <= 15 days or not Month/Winter Ending - use full range
+                    # For Actual ranges: fetch payroll for the whole range (no splitting)
+                    if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                     "Month to Date (Actual)", "For Winter Ending (Actual)"]:
                         payroll_dataframe = stored_procedures.execute_payroll(resort_name, start, end)
                         data_store[range_name]['payroll'] = payroll_dataframe
-                        data_store[range_name]['recent_15_days_range'] = None
-                        data_store[range_name]['rest_of_range'] = None
                         
                         # Export Payroll SP result
                         if not payroll_dataframe.empty:
@@ -319,11 +284,14 @@ class ReportGenerator:
                         elif debug == 'simple':
                             print(f"      [DEBUG SIMPLE] Payroll data for {range_name} (top 5 rows):")
                             print(f"      {payroll_dataframe.head(5) if not payroll_dataframe.empty else 'Empty DataFrame'}")
+                    else:
+                        # Prior Year ranges - no payroll data needed (will use history only)
+                        data_store[range_name]['payroll'] = pd.DataFrame()
+                        if debug in ['simple', 'verbose']:
+                            print(f"      [DEBUG] Skipping payroll fetch for {range_name} (Prior Year - using history only)")
                 else:
                     # Set empty DataFrame for payroll when current date
                     data_store[range_name]['payroll'] = pd.DataFrame()
-                    data_store[range_name]['recent_15_days_range'] = None
-                    data_store[range_name]['rest_of_range'] = None
                     if debug in ['simple', 'verbose']:
                         print(f"      [DEBUG] Skipping payroll fetch for {range_name} (current date - payroll will be 0)")
                 
@@ -355,49 +323,29 @@ class ReportGenerator:
                     print(f"      [DEBUG SIMPLE] Snow data for {range_name} (top 5 rows):")
                     print(f"      {snow_dataframe.head(5) if not snow_dataframe.empty else 'Empty DataFrame'}")
                 
-                # Payroll History - skip if current date
+                # Payroll History - only for Prior Year ranges, skip if current date
                 if not is_current_date:
-                    # Check if we have a split range (Rest of Range)
-                    rest_of_range = data_store[range_name].get('rest_of_range', None)
-                    
-                    if rest_of_range is not None:
-                        # Range was split - fetch history for Rest of Range
-                        rest_start, rest_end = rest_of_range
-                        history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, rest_start, rest_end)
+                    # Only fetch history for Prior Year ranges
+                    if range_name not in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                         "Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                        # Prior Year ranges - fetch history for full range
+                        history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, start, end)
                         data_store[range_name]['payroll_history'] = history_payroll_dataframe
                         
-                        # Export Payroll History SP result
                         if not history_payroll_dataframe.empty:
                             export_path = self._export_sp_result(history_payroll_dataframe, range_name, "PayrollHistory", resort_name)
-                            print(f"      💾 Exported Payroll History data (Rest of Range): {os.path.basename(export_path)}")
+                            print(f"      💾 Exported Payroll History data: {os.path.basename(export_path)}")
                         if debug == 'verbose':
-                            print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} - Rest of Range ({rest_start.date()} - {rest_end.date()}) (complete):")
+                            print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (complete):")
                             print(f"      {history_payroll_dataframe}")
                         elif debug == 'simple':
-                            print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} - Rest of Range ({rest_start.date()} - {rest_end.date()}) (top 5 rows):")
+                            print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (top 5 rows):")
                             print(f"      {history_payroll_dataframe.head(5) if not history_payroll_dataframe.empty else 'Empty DataFrame'}")
                     else:
-                        # No split - check if history is needed for Prior Year ranges
-                        if range_name not in ["For The Day (Actual)", "For The Week Ending (Actual)", 
-                                             "Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                            # Prior Year ranges - fetch history for full range
-                            history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, start, end)
-                            data_store[range_name]['payroll_history'] = history_payroll_dataframe
-                            
-                            if not history_payroll_dataframe.empty:
-                                export_path = self._export_sp_result(history_payroll_dataframe, range_name, "PayrollHistory", resort_name)
-                                print(f"      💾 Exported Payroll History data: {os.path.basename(export_path)}")
-                            if debug == 'verbose':
-                                print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (complete):")
-                                print(f"      {history_payroll_dataframe}")
-                            elif debug == 'simple':
-                                print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (top 5 rows):")
-                                print(f"      {history_payroll_dataframe.head(5) if not history_payroll_dataframe.empty else 'Empty DataFrame'}")
-                        else:
-                            # Range <= 15 days - no history needed
-                            data_store[range_name]['payroll_history'] = pd.DataFrame()
-                            if debug in ['simple', 'verbose']:
-                                print(f"      [DEBUG] Skipping payroll history for {range_name} (range <= 15 days, using salary payroll only)")
+                        # Actual ranges - no history needed
+                        data_store[range_name]['payroll_history'] = pd.DataFrame()
+                        if debug in ['simple', 'verbose']:
+                            print(f"      [DEBUG] Skipping payroll history for {range_name} (Actual range - using payroll + salary)")
                 else:
                     # No history needed for current date
                     data_store[range_name]['payroll_history'] = pd.DataFrame()
@@ -602,8 +550,6 @@ class ReportGenerator:
             calculated_payroll = {}  # department -> calculated wages
             contract_payroll_rows = {}  # department -> list of employee rows
             salary_totals_by_dept = {}  # dept_code -> salary_total_for_range
-            recent_week_salary_by_dept = {}  # dept_code -> recent_15_days_salary (for ranges > 15 days)
-            rest_range_salary_by_dept = {}  # dept_code -> rest_range_payroll (for ranges > 15 days, from history SP)
             history_payroll = {}  # department -> total from history
             
             # Get date range info (needed for logging)
@@ -632,12 +578,14 @@ class ReportGenerator:
                 valid_rows = pd.DataFrame()
                 
                 if not payroll_dataframe.empty:
-                    # Need columns: Department, start_punchtime, end_punchtime, rate
+                    # Need columns: Department, start_punchtime, end_punchtime, rate, hours, dollaramount
                     department_column = get_col(payroll_dataframe, CandidateColumns.department) or 'department'
                     department_title_column = get_col(payroll_dataframe, CandidateColumns.departmentTitle)
                     start_column = get_col(payroll_dataframe, CandidateColumns.payrollStartTime)
                     end_column = get_col(payroll_dataframe, CandidateColumns.payrollEndTime)
                     rate_column = get_col(payroll_dataframe, CandidateColumns.payrollRate)
+                    hours_column = get_col(payroll_dataframe, CandidateColumns.payrollHours)
+                    dollaramount_column = get_col(payroll_dataframe, CandidateColumns.payrollDollarAmount)
                     
                     if department_column and start_column and end_column and rate_column:
                         # Build mapping from code to title (with whitespace trimming)
@@ -659,19 +607,28 @@ class ReportGenerator:
                                         print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in payroll data (mapping already exists)")
                                         print(f"       Payroll row: {row.to_dict()}")
                         
-                        # Ensure datetime
+                        # Ensure datetime and numeric types
                         payroll_dataframe[start_column] = pd.to_datetime(payroll_dataframe[start_column], errors='coerce')
                         payroll_dataframe[end_column] = pd.to_datetime(payroll_dataframe[end_column], errors='coerce')
                         payroll_dataframe[rate_column] = pd.to_numeric(payroll_dataframe[rate_column], errors='coerce').fillna(0)
                         
-                        # Remove invalid times
-                        valid_rows = payroll_dataframe.dropna(subset=[start_column, end_column])
+                        # Convert hours and dollaramount columns if they exist
+                        if hours_column:
+                            payroll_dataframe[hours_column] = pd.to_numeric(payroll_dataframe[hours_column], errors='coerce').fillna(0)
+                        if dollaramount_column:
+                            payroll_dataframe[dollaramount_column] = pd.to_numeric(payroll_dataframe[dollaramount_column], errors='coerce').fillna(0)
                         
-                        for _, row in valid_rows.iterrows():
+                        # Process all rows (we'll handle nulls in the calculation)
+                        for _, row in payroll_dataframe.iterrows():
                             start_time = row[start_column]
                             end_time = row[end_column]
-                            rate = row[rate_column]
+                            rate = normalize_value(row[rate_column])
                             department = trim_dept_code(row[department_column])
+                            
+                            # Skip if department is missing
+                            if not department:
+                                continue
+                                
                             all_departments.add(department) # Add to departments if not in revenue
                             
                             # If no title mapping yet, use the code as title
@@ -706,20 +663,25 @@ class ReportGenerator:
                                 
                                 department_code_to_title[department] = department
                             
-                            # Calculate hours
-                            hours_worked = (end_time - start_time).total_seconds() / 3600.0
-                            if hours_worked < 0: hours_worked = 0 # Should not happen but safety
+                            # Calculate working_hours from punch in/out (or 0 if any is null)
+                            if pd.notna(start_time) and pd.notna(end_time):
+                                working_hours = (end_time - start_time).total_seconds() / 3600.0
+                                if working_hours < 0:
+                                    working_hours = 0
+                            else:
+                                working_hours = 0
                             
-                            ## Sample OT Logic
-                            ## <= 8 hrs: hours * rate
-                            ## > 8 hrs: (8 * rate) + ((hours - 8) * rate * 1.5)
-                            # if hours_worked <= 8:
-                            #     wages = hours_worked * rate
-                            # else:
-                            #     wages = (8 * rate) + ((hours_worked - 8) * rate * 1.5)
-
-                            # Calculate wages (simple linear calculation)
-                            wages = hours_worked * rate
+                            # Get hours and dollaramount from columns (default to 0 if not present or null)
+                            hours_value = normalize_value(row[hours_column]) if hours_column and hours_column in payroll_dataframe.columns else 0
+                            dollaramount_value = normalize_value(row[dollaramount_column]) if dollaramount_column and dollaramount_column in payroll_dataframe.columns else 0
+                            
+                            # Calculate wages using new formula:
+                            # if hours > 0: wage = (hours × rate) + dollaramount
+                            # else: wage = (working_hours × rate) + dollaramount
+                            if hours_value > 0:
+                                wages = (hours_value * rate) + dollaramount_value
+                            else:
+                                wages = (working_hours * rate) + dollaramount_value
                             
                             # Track employee row details for logging
                             if department not in contract_payroll_rows:
@@ -727,8 +689,10 @@ class ReportGenerator:
                             contract_payroll_rows[department].append({
                                 'start_time': start_time,
                                 'end_time': end_time,
-                                'hours_worked': hours_worked,
+                                'working_hours': working_hours,
+                                'hours_column': hours_value,
                                 'rate': rate,
+                                'dollaramount': dollaramount_value,
                                 'wages': wages
                             })
                             
@@ -748,26 +712,10 @@ class ReportGenerator:
                             if dept_code:
                                 history_payroll[dept_code] = total
                 
-                # Step 3: Apply salary payroll logic based on range type
-                if range_name == "For The Day (Actual)":
-                    # For The Day (Actual): calculated payroll + salaryPayrollRatePerDay
-                    for dept_code, calculated_wages in calculated_payroll.items():
-                        salary_rate = salary_payroll_rates.get(dept_code, 0)
-                        salary_total = normalize_value(salary_rate)
-                        salary_totals_by_dept[dept_code] = salary_total
-                        total_payroll = normalize_value(calculated_wages) + salary_total
-                        processed_payroll[range_name][dept_code] = total_payroll
-                    
-                    # Add departments that only have salary payroll
-                    for dept_code, salary_rate in salary_payroll_rates.items():
-                        if dept_code not in processed_payroll[range_name]:
-                            salary_total = normalize_value(salary_rate)
-                            salary_totals_by_dept[dept_code] = salary_total
-                            processed_payroll[range_name][dept_code] = salary_total
-                            all_departments.add(dept_code)
-                
-                elif range_name == "For The Week Ending (Actual)":
-                    # For The Week Ending (Actual): calculated payroll + (salaryPayrollRatePerDay × number of days)
+                # Step 3: Apply simplified payroll logic based on range type
+                if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                 "Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                    # For all Actual ranges: (Salary × number of days) + Payroll data for that whole range
                     for dept_code, calculated_wages in calculated_payroll.items():
                         salary_rate = salary_payroll_rates.get(dept_code, 0)
                         salary_total = normalize_value(salary_rate) * days_in_range
@@ -783,70 +731,8 @@ class ReportGenerator:
                             processed_payroll[range_name][dept_code] = salary_total
                             all_departments.add(dept_code)
                 
-                elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                    # For Month to Date and Winter Ending (Actual):
-                    # If range is <= 15 days: calculated payroll + (salaryPayrollRatePerDay × days_in_range)
-                    # If range is > 15 days: 
-                    #   - Recent 15 days: (Active Salary SP rate × 15) + Payroll SP aggregated result
-                    #   - Rest Range: History SP (already includes both salary and payroll, no additions needed)
-                    #   - Total = Recent 15 days Payroll + Rest Range
-                    
-                    if days_in_range <= 15:
-                        # Entire range is within 15 days - use salary rate for all days (no history needed)
-                        for dept_code, calculated_wages in calculated_payroll.items():
-                            salary_rate = salary_payroll_rates.get(dept_code, 0)
-                            salary_total = normalize_value(salary_rate) * days_in_range
-                            salary_totals_by_dept[dept_code] = salary_total
-                            total_payroll = normalize_value(calculated_wages) + salary_total
-                            processed_payroll[range_name][dept_code] = total_payroll
-                        
-                        # Add departments that only have salary payroll
-                        for dept_code, salary_rate in salary_payroll_rates.items():
-                            if dept_code not in processed_payroll[range_name]:
-                                salary_total = normalize_value(salary_rate) * days_in_range
-                                salary_totals_by_dept[dept_code] = salary_total
-                                processed_payroll[range_name][dept_code] = salary_total
-                                all_departments.add(dept_code)
-                    else:
-                        # Range is > 15 days - split into Recent 15 Days and Rest of Range
-                        # Payroll SP was already called with Recent 15 Days range only
-                        # History SP was already called with Rest of Range
-                        
-                        # Calculate contract payroll from Recent 15 Days Payroll SP results
-                        recent_15_days_calculated_payroll = calculated_payroll.copy()  # Already calculated from Recent 15 Days range
-                        
-                        # Calculate salary for Recent 15 Days
-                        recent_15_days_salary_payroll = {}
-                        for dept_code, salary_rate in salary_payroll_rates.items():
-                            recent_salary = normalize_value(salary_rate) * 15
-                            recent_15_days_salary_payroll[dept_code] = recent_salary
-                            recent_week_salary_by_dept[dept_code] = recent_salary
-                        
-                        # Rest of Range payroll from history (already includes both salary and payroll, no additions needed)
-                        rest_of_range_payroll = {k: normalize_value(v) for k, v in history_payroll.items()}
-                        rest_range_salary_by_dept = rest_of_range_payroll.copy()
-                        
-                        # Combine all payroll components
-                        # Recent 15 Days total = contract payroll (from Payroll SP) + (salary rate × 15)
-                        # Rest of Range = history payroll (already complete)
-                        # Total = Recent 15 Days total + Rest of Range
-                        all_dept_codes = set(recent_15_days_calculated_payroll.keys()) | set(recent_15_days_salary_payroll.keys()) | set(rest_of_range_payroll.keys())
-                        for dept_code in all_dept_codes:
-                            calculated_wages = normalize_value(recent_15_days_calculated_payroll.get(dept_code, 0))
-                            recent_salary = recent_15_days_salary_payroll.get(dept_code, 0)
-                            rest_payroll = rest_of_range_payroll.get(dept_code, 0)
-                            
-                            # Recent 15 Days payroll = contract + salary
-                            recent_15_days_total = calculated_wages + recent_salary
-                            salary_totals_by_dept[dept_code] = recent_salary  # Only track recent 15 days salary
-                            
-                            # Total = Recent 15 Days + Rest of Range (history already includes both salary and payroll)
-                            total_payroll = recent_15_days_total + rest_payroll
-                            processed_payroll[range_name][dept_code] = total_payroll
-                            all_departments.add(dept_code)
-                
                 else:
-                    # All Prior Year ranges: ONLY use history payroll (ignore contract employees)
+                    # All Prior Year ranges: ONLY use history payroll
                     # Prior Year ranges don't use salary payroll or contract payroll
                     for dept_code, history_total in history_payroll.items():
                         salary_totals_by_dept[dept_code] = 0.0  # No salary for prior year
@@ -860,20 +746,14 @@ class ReportGenerator:
             if is_current_date:
                 print(f"  ⚠️  NOTE: Current date - payroll set to 0 for all departments")
             
-            # Show range split information if applicable
-            recent_15_days_range = data_store[range_name].get('recent_15_days_range', None)
-            rest_of_range = data_store[range_name].get('rest_of_range', None)
-            if recent_15_days_range and rest_of_range:
-                recent_start, recent_end = recent_15_days_range
-                rest_start, rest_end = rest_of_range
-                print(f"  📅 Range Split:")
-                print(f"     • Recent 15 Days: {recent_start.date()} to {recent_end.date()}")
-                print(f"     • Rest of Range: {rest_start.date()} to {rest_end.date()}")
-            
             print(f"{'='*80}")
             
             # Get all departments that have payroll data
             all_payroll_depts = set(processed_payroll[range_name].keys())
+            
+            # Check if this is a Prior Year range
+            is_prior_year = range_name not in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                               "Month to Date (Actual)", "For Winter Ending (Actual)"]
             
             if not all_payroll_depts:
                 print(f"    No payroll data found for this range.")
@@ -887,10 +767,6 @@ class ReportGenerator:
                     contract_rows = contract_payroll_rows.get(dept_code, [])
                     contract_total = normalize_value(calculated_payroll.get(dept_code, 0))
                     
-                    # Check if this is a Prior Year range
-                    is_prior_year = range_name not in ["For The Day (Actual)", "For The Week Ending (Actual)", 
-                                                       "Month to Date (Actual)", "For Winter Ending (Actual)"]
-                    
                     print(f"     📋 Contract Payroll (Hourly Employees):")
                     if is_prior_year:
                         print(f"        • Prior Year Range - Contract Payroll NOT USED (ignored)")
@@ -898,8 +774,12 @@ class ReportGenerator:
                     elif contract_rows:
                         print(f"        • Employee rows received: {len(contract_rows)}")
                         for idx, row_data in enumerate(contract_rows, 1):
+                            working_hours = row_data.get('working_hours', 0)
+                            hours_column = row_data.get('hours_column', 0)
+                            dollaramount = row_data.get('dollaramount', 0)
                             print(f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
-                                  f"Hours={row_data['hours_worked']:.2f}, Rate=${row_data['rate']:.2f}, "
+                                  f"WorkingHours={working_hours:.2f}, HoursColumn={hours_column:.2f}, "
+                                  f"Rate=${row_data['rate']:.2f}, DollarAmount=${dollaramount:,.2f}, "
                                   f"Wages=${row_data['wages']:.2f}")
                         print(f"        • Aggregated Contract Payroll Total: ${contract_total:,.2f}")
                     else:
@@ -916,30 +796,22 @@ class ReportGenerator:
                     # Show salary total based on range type
                     if is_current_date:
                         print(f"        • Salary for Range: $0.00 (Current date - not calculated)")
-                    elif range_name == "For The Day (Actual)":
-                        print(f"        • Salary for Range (1 day): ${salary_total:,.2f}")
-                    elif range_name == "For The Week Ending (Actual)":
-                        print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
-                    elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                        if days_in_range <= 15:
-                            print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
-                        else:
-                            recent_salary = recent_week_salary_by_dept.get(dept_code, 0)
-                            rest_payroll = rest_range_salary_by_dept.get(dept_code, 0)
-                            print(f"        • Recent 15 Days Salary: ${recent_salary:,.2f}")
-                            print(f"        • Rest of Range Payroll (from history - includes both salary and payroll): ${rest_payroll:,.2f}")
-                            print(f"        • Total Salary for Recent 15 Days: ${salary_total:,.2f}")
-                    else:
+                    elif is_prior_year:
                         # Prior Year ranges don't use salary payroll
                         print(f"        • Salary for Range: $0.00 (Prior Year - not applicable)")
+                    else:
+                        print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
                     
                     # History Payroll Details
                     history_total = normalize_value(history_payroll.get(dept_code, 0))
                     print(f"\n     📜 History Payroll:")
-                    if history_total > 0:
-                        print(f"        • Historical Payroll Total: ${history_total:,.2f}")
+                    if is_prior_year:
+                        if history_total > 0:
+                            print(f"        • Historical Payroll Total: ${history_total:,.2f}")
+                        else:
+                            print(f"        • No history payroll data found")
                     else:
-                        print(f"        • No history payroll data found")
+                        print(f"        • Not used for Actual ranges")
                     
                     # Final Total
                     final_total = normalize_value(processed_payroll[range_name].get(dept_code, 0))
@@ -948,23 +820,8 @@ class ReportGenerator:
                     # Show breakdown based on range type
                     if is_prior_year:
                         print(f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll")
-                    elif range_name in ["Month to Date (Actual)", "For Winter Ending (Actual)"] and days_in_range > 15:
-                        # For ranges > 15 days: Recent 15 Days (Contract + Salary) + Rest of Range (History)
-                        recent_15_days_total = contract_total + salary_total
-                        rest_payroll = rest_range_salary_by_dept.get(dept_code, 0)
-                        recent_15_days_range = data_store[range_name].get('recent_15_days_range', None)
-                        rest_of_range = data_store[range_name].get('rest_of_range', None)
-                        if recent_15_days_range and rest_of_range:
-                            recent_start, recent_end = recent_15_days_range
-                            rest_start, rest_end = rest_of_range
-                            print(f"        Breakdown:")
-                            print(f"          Recent 15 Days ({recent_start.date()} - {recent_end.date()}): Contract ${contract_total:,.2f} + Salary ${salary_total:,.2f} = ${recent_15_days_total:,.2f}")
-                            print(f"          Rest of Range ({rest_start.date()} - {rest_end.date()}): History ${rest_payroll:,.2f}")
-                            print(f"          Total: ${final_total:,.2f}")
-                        else:
-                            print(f"        Breakdown: Recent 15 Days (Contract ${contract_total:,.2f} + Salary ${salary_total:,.2f} = ${recent_15_days_total:,.2f}) + Rest of Range History (${rest_payroll:,.2f})")
                     else:
-                        print(f"        Breakdown: Contract (${contract_total:,.2f}) + Salary (${salary_total:,.2f}) + History (${history_total:,.2f})")
+                        print(f"        Breakdown: Contract Payroll (${contract_total:,.2f}) + (Salary Rate × {days_in_range} days = ${salary_total:,.2f}) = ${final_total:,.2f}")
             
             print(f"\n{'='*80}\n")
 
