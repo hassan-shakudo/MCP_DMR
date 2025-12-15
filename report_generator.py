@@ -47,7 +47,8 @@ class ReportGenerator:
                          dataframe: pd.DataFrame, 
                          range_name: str, 
                          sp_name: str, 
-                         resort_name: str) -> str:
+                         resort_name: str,
+                         export_dir: Union[str, None] = None) -> str:
         """
         Export a stored procedure result to an Excel file
         
@@ -56,6 +57,7 @@ class ReportGenerator:
             range_name: Name of the date range (e.g., "For The Day (Actual)")
             sp_name: Name of the stored procedure (e.g., "Revenue", "Payroll")
             resort_name: Name of the resort
+            export_dir: Optional directory to export to (defaults to self.output_dir)
             
         Returns:
             Path to saved Excel file
@@ -66,7 +68,8 @@ class ReportGenerator:
         
         # Create filename: RangeName_SPname.xlsx
         filename = f"{sanitized_range}_{sanitized_sp}.xlsx"
-        filepath = os.path.join(self.output_dir, filename)
+        target_dir = export_dir if export_dir else self.output_dir
+        filepath = os.path.join(target_dir, filename)
         
         # Sort by department/department code for Revenue and Payroll
         if sp_name in ['Revenue', 'Payroll']:
@@ -148,7 +151,8 @@ class ReportGenerator:
     def generate_comprehensive_report(self, 
                                     resort_config: Dict[str, Any], 
                                     run_date: Union[str, datetime, None] = None,
-                                    debug: Any = False) -> str:
+                                    debug: bool = False,
+                                    file_name_postfix: Union[str, None] = None) -> str:
         """
         Generate the comprehensive Excel report for a resort.
         
@@ -161,7 +165,8 @@ class ReportGenerator:
                      If the date is current date (or None), generates report for today 
                      (start of day to current time) and skips payroll.
                      If past date, generates report for that day (start to end of day) normally.
-            debug: Debug mode - False (no debug), 'simple' (top 5 rows), or 'verbose' (complete datasets)
+            debug: Debug mode - True to export datasets and save debug logs, False otherwise
+            file_name_postfix: Optional string to append to file and folder names (e.g., "01")
             
         Returns:
             Path to saved Excel file
@@ -220,6 +225,31 @@ class ReportGenerator:
             "For Winter Ending (Prior Year)"
         ]
         
+        # Get date from "For The Day (Actual)" for file/directory naming
+        day_actual_start, _ = ranges["For The Day (Actual)"]
+        report_date_str = day_actual_start.strftime("%Y%m%d")
+        
+        # Setup debug directory and log file if debug mode is enabled
+        debug_dir = None
+        debug_log_file = None
+        if debug:
+            # Create debug directory name
+            sanitized_resort = self._sanitize_filename(resort_name).lower()
+            if file_name_postfix:
+                debug_dir_name = f"Debug-{sanitized_resort}-{report_date_str}-{file_name_postfix}"
+            else:
+                debug_dir_name = f"Debug-{sanitized_resort}-{report_date_str}"
+            
+            debug_dir = os.path.join(self.output_dir, debug_dir_name)
+            if not os.path.exists(debug_dir):
+                os.makedirs(debug_dir)
+                print(f"✓ Created debug directory: {debug_dir}")
+            
+            # Create debug log file
+            debug_log_path = os.path.join(debug_dir, "DebugLogs.txt")
+            debug_log_file = open(debug_log_path, 'w', encoding='utf-8')
+            print(f"✓ Created debug log file: {debug_log_path}")
+        
         # 2. Fetch Data for all ranges
         data_store = {name: {} for name in range_names}
         
@@ -235,15 +265,9 @@ class ReportGenerator:
                 print(f"   ⏳ Fetching salary payroll data for {resort_name}...")
                 salary_payroll_data = stored_procedures.execute_payroll_salary(resort_name)
                 # Export Salary Payroll SP result (not range-specific, so use a generic range name)
-                if not salary_payroll_data.empty:
-                    export_path = self._export_sp_result(salary_payroll_data, "SalaryPayroll", "PayrollSalary", resort_name)
+                if debug and not salary_payroll_data.empty:
+                    export_path = self._export_sp_result(salary_payroll_data, "SalaryPayroll", "PayrollSalary", resort_name, debug_dir)
                     print(f"      💾 Exported Salary Payroll data: {os.path.basename(export_path)}")
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Salary payroll data (complete):")
-                    print(f"      {salary_payroll_data}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Salary payroll data (top 5 rows):")
-                    print(f"      {salary_payroll_data.head(5) if not salary_payroll_data.empty else 'Empty DataFrame'}")
             else:
                 print(f"   ⏭️  Skipping salary payroll data fetch (current date - payroll will be 0)")
                 salary_payroll_data = None
@@ -256,15 +280,9 @@ class ReportGenerator:
                 revenue_dataframe = stored_procedures.execute_revenue(db_name, group_num, start, end)
                 data_store[range_name]['revenue'] = revenue_dataframe
                 # Export Revenue SP result
-                if not revenue_dataframe.empty:
-                    export_path = self._export_sp_result(revenue_dataframe, range_name, "Revenue", resort_name)
+                if debug and not revenue_dataframe.empty:
+                    export_path = self._export_sp_result(revenue_dataframe, range_name, "Revenue", resort_name, debug_dir)
                     print(f"      💾 Exported Revenue data: {os.path.basename(export_path)}")
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Revenue data for {range_name} (complete):")
-                    print(f"      {revenue_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Revenue data for {range_name} (top 5 rows):")
-                    print(f"      {revenue_dataframe.head(5) if not revenue_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Payroll - skip if current date
                 if not is_current_date:
@@ -275,53 +293,31 @@ class ReportGenerator:
                         data_store[range_name]['payroll'] = payroll_dataframe
                         
                         # Export Payroll SP result
-                        if not payroll_dataframe.empty:
-                            export_path = self._export_sp_result(payroll_dataframe, range_name, "Payroll", resort_name)
+                        if debug and not payroll_dataframe.empty:
+                            export_path = self._export_sp_result(payroll_dataframe, range_name, "Payroll", resort_name, debug_dir)
                             print(f"      💾 Exported Payroll data: {os.path.basename(export_path)}")
-                        if debug == 'verbose':
-                            print(f"      [DEBUG VERBOSE] Payroll data for {range_name} (complete):")
-                            print(f"      {payroll_dataframe}")
-                        elif debug == 'simple':
-                            print(f"      [DEBUG SIMPLE] Payroll data for {range_name} (top 5 rows):")
-                            print(f"      {payroll_dataframe.head(5) if not payroll_dataframe.empty else 'Empty DataFrame'}")
                     else:
                         # Prior Year ranges - no payroll data needed (will use history only)
                         data_store[range_name]['payroll'] = pd.DataFrame()
-                        if debug in ['simple', 'verbose']:
-                            print(f"      [DEBUG] Skipping payroll fetch for {range_name} (Prior Year - using history only)")
                 else:
                     # Set empty DataFrame for payroll when current date
                     data_store[range_name]['payroll'] = pd.DataFrame()
-                    if debug in ['simple', 'verbose']:
-                        print(f"      [DEBUG] Skipping payroll fetch for {range_name} (current date - payroll will be 0)")
                 
                 # Visits
                 visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
                 data_store[range_name]['visits'] = visits_dataframe
                 # Export Visits SP result
-                if not visits_dataframe.empty:
-                    export_path = self._export_sp_result(visits_dataframe, range_name, "Visits", resort_name)
+                if debug and not visits_dataframe.empty:
+                    export_path = self._export_sp_result(visits_dataframe, range_name, "Visits", resort_name, debug_dir)
                     print(f"      💾 Exported Visits data: {os.path.basename(export_path)}")
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Visits data for {range_name} (complete):")
-                    print(f"      {visits_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Visits data for {range_name} (top 5 rows):")
-                    print(f"      {visits_dataframe.head(5) if not visits_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Weather/Snow
                 snow_dataframe = stored_procedures.execute_weather(resort_name, start, end)
                 data_store[range_name]['snow'] = snow_dataframe
                 # Export Weather/Snow SP result
-                if not snow_dataframe.empty:
-                    export_path = self._export_sp_result(snow_dataframe, range_name, "Weather", resort_name)
+                if debug and not snow_dataframe.empty:
+                    export_path = self._export_sp_result(snow_dataframe, range_name, "Weather", resort_name, debug_dir)
                     print(f"      💾 Exported Weather data: {os.path.basename(export_path)}")
-                if debug == 'verbose':
-                    print(f"      [DEBUG VERBOSE] Snow data for {range_name} (complete):")
-                    print(f"      {snow_dataframe}")
-                elif debug == 'simple':
-                    print(f"      [DEBUG SIMPLE] Snow data for {range_name} (top 5 rows):")
-                    print(f"      {snow_dataframe.head(5) if not snow_dataframe.empty else 'Empty DataFrame'}")
                 
                 # Payroll History - only for Prior Year ranges, skip if current date
                 if not is_current_date:
@@ -332,25 +328,15 @@ class ReportGenerator:
                         history_payroll_dataframe = stored_procedures.execute_payroll_history(resort_name, start, end)
                         data_store[range_name]['payroll_history'] = history_payroll_dataframe
                         
-                        if not history_payroll_dataframe.empty:
-                            export_path = self._export_sp_result(history_payroll_dataframe, range_name, "PayrollHistory", resort_name)
+                        if debug and not history_payroll_dataframe.empty:
+                            export_path = self._export_sp_result(history_payroll_dataframe, range_name, "PayrollHistory", resort_name, debug_dir)
                             print(f"      💾 Exported Payroll History data: {os.path.basename(export_path)}")
-                        if debug == 'verbose':
-                            print(f"      [DEBUG VERBOSE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (complete):")
-                            print(f"      {history_payroll_dataframe}")
-                        elif debug == 'simple':
-                            print(f"      [DEBUG SIMPLE] Payroll history data for {range_name} ({start.date()} - {end.date()}) (top 5 rows):")
-                            print(f"      {history_payroll_dataframe.head(5) if not history_payroll_dataframe.empty else 'Empty DataFrame'}")
                     else:
                         # Actual ranges - no history needed
                         data_store[range_name]['payroll_history'] = pd.DataFrame()
-                        if debug in ['simple', 'verbose']:
-                            print(f"      [DEBUG] Skipping payroll history for {range_name} (Actual range - using payroll + salary)")
                 else:
                     # No history needed for current date
                     data_store[range_name]['payroll_history'] = pd.DataFrame()
-                    if debug in ['simple', 'verbose']:
-                        print(f"      [DEBUG] Skipping payroll history for {range_name} (current date - payroll will be 0)")
 
         # 3. Process Data and Collect Row Headers
         all_locations = set()
@@ -417,7 +403,7 @@ class ReportGenerator:
                                     print(f"    ⚠️  [WARN] Empty/null title for department code '{dept_code}' in salary payroll data (mapping already exists)")
                                     print(f"       Salary payroll row: {row.to_dict()}")
                 
-                if debug in ['simple', 'verbose']:
+                if debug:
                     print(f"      [DEBUG] Salary payroll rates: {salary_payroll_rates}")
                     print(f"      [DEBUG] Department code to title mapping (from salary payroll): {department_code_to_title}")
         
@@ -506,7 +492,7 @@ class ReportGenerator:
                                     # Warning: Title exists in mapping but current row has empty title
                                     print(f"    ⚠️  [WARN] Empty/null title for department code '{code}' in revenue data (mapping already exists)")
                                     print(f"       Revenue row: {row.to_dict()}")
-                    if debug in ['simple', 'verbose']:
+                    if debug:
                         print(f'    [DEBUG] Department code to title mapping (after revenue processing for {range_name}): {department_code_to_title}')
                     grouped = revenue_dataframe.groupby(department_code_column)[revenue_column].sum()
                     for department, value in grouped.items():
@@ -740,13 +726,13 @@ class ReportGenerator:
                         processed_payroll[range_name][dept_code] = normalize_value(history_total)
                         all_departments.add(dept_code)
             
-            # Step 5: Log detailed payroll breakdown for each department (always execute)
-            print(f"\n{'='*80}")
-            print(f"  📊 PAYROLL CALCULATION BREAKDOWN - {range_name}")
+            # Step 5: Log detailed payroll breakdown for each department (save to debug log if debug enabled)
+            log_message = f"\n{'='*80}\n"
+            log_message += f"  📊 PAYROLL CALCULATION BREAKDOWN - {range_name}\n"
             if is_current_date:
-                print(f"  ⚠️  NOTE: Current date - payroll set to 0 for all departments")
+                log_message += f"  ⚠️  NOTE: Current date - payroll set to 0 for all departments\n"
             
-            print(f"{'='*80}")
+            log_message += f"{'='*80}\n"
             
             # Get all departments that have payroll data
             all_payroll_depts = set(processed_payroll[range_name].keys())
@@ -756,89 +742,90 @@ class ReportGenerator:
                                                "Month to Date (Actual)", "For Winter Ending (Actual)"]
             
             if not all_payroll_depts:
-                print(f"    No payroll data found for this range.")
+                log_message += f"    No payroll data found for this range.\n"
             else:
                 for dept_code in sorted(all_payroll_depts):
                     dept_title = department_code_to_title.get(dept_code, dept_code)
-                    print(f"\n  📁 Department: {dept_code} ({dept_title})")
-                    print(f"     {'─'*76}")
+                    log_message += f"\n  📁 Department: {dept_code} ({dept_title})\n"
+                    log_message += f"     {'─'*76}\n"
                     
                     # Contract Payroll Details
                     contract_rows = contract_payroll_rows.get(dept_code, [])
                     contract_total = normalize_value(calculated_payroll.get(dept_code, 0))
                     
-                    print(f"     📋 Contract Payroll (Hourly Employees):")
+                    log_message += f"     📋 Contract Payroll (Hourly Employees):\n"
                     if is_prior_year:
-                        print(f"        • Prior Year Range - Contract Payroll NOT USED (ignored)")
-                        print(f"        • Only History Payroll is used for Prior Year ranges")
+                        log_message += f"        • Prior Year Range - Contract Payroll NOT USED (ignored)\n"
+                        log_message += f"        • Only History Payroll is used for Prior Year ranges\n"
                     elif contract_rows:
-                        print(f"        • Employee rows received: {len(contract_rows)}")
+                        log_message += f"        • Employee rows received: {len(contract_rows)}\n"
                         for idx, row_data in enumerate(contract_rows, 1):
                             working_hours = row_data.get('working_hours', 0)
                             hours_column = row_data.get('hours_column', 0)
                             dollaramount = row_data.get('dollaramount', 0)
-                            print(f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
-                                  f"WorkingHours={working_hours:.2f}, HoursColumn={hours_column:.2f}, "
-                                  f"Rate=${row_data['rate']:.2f}, DollarAmount=${dollaramount:,.2f}, "
-                                  f"Wages=${row_data['wages']:.2f}")
-                        print(f"        • Aggregated Contract Payroll Total: ${contract_total:,.2f}")
+                            log_message += f"          Row {idx}: Start={row_data['start_time']}, End={row_data['end_time']}, "
+                            log_message += f"WorkingHours={working_hours:.2f}, HoursColumn={hours_column:.2f}, "
+                            log_message += f"Rate=${row_data['rate']:.2f}, DollarAmount=${dollaramount:,.2f}, "
+                            log_message += f"Wages=${row_data['wages']:.2f}\n"
+                        log_message += f"        • Aggregated Contract Payroll Total: ${contract_total:,.2f}\n"
                     else:
-                        print(f"        • No contract payroll rows found")
-                        print(f"        • Aggregated Contract Payroll Total: $0.00")
+                        log_message += f"        • No contract payroll rows found\n"
+                        log_message += f"        • Aggregated Contract Payroll Total: $0.00\n"
                     
                     # Salary Payroll Details
                     salary_rate = salary_payroll_rates.get(dept_code, 0)
                     salary_total = salary_totals_by_dept.get(dept_code, 0)
                     
-                    print(f"\n     💰 Salary Payroll:")
-                    print(f"        • Daily Salary Rate: ${salary_rate:,.2f}")
+                    log_message += f"\n     💰 Salary Payroll:\n"
+                    log_message += f"        • Daily Salary Rate: ${salary_rate:,.2f}\n"
                     
                     # Show salary total based on range type
                     if is_current_date:
-                        print(f"        • Salary for Range: $0.00 (Current date - not calculated)")
+                        log_message += f"        • Salary for Range: $0.00 (Current date - not calculated)\n"
                     elif is_prior_year:
                         # Prior Year ranges don't use salary payroll
-                        print(f"        • Salary for Range: $0.00 (Prior Year - not applicable)")
+                        log_message += f"        • Salary for Range: $0.00 (Prior Year - not applicable)\n"
                     else:
-                        print(f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}")
+                        log_message += f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}\n"
                     
                     # History Payroll Details
                     history_total = normalize_value(history_payroll.get(dept_code, 0))
-                    print(f"\n     📜 History Payroll:")
+                    log_message += f"\n     📜 History Payroll:\n"
                     if is_prior_year:
                         if history_total > 0:
-                            print(f"        • Historical Payroll Total: ${history_total:,.2f}")
+                            log_message += f"        • Historical Payroll Total: ${history_total:,.2f}\n"
                         else:
-                            print(f"        • No history payroll data found")
+                            log_message += f"        • No history payroll data found\n"
                     else:
-                        print(f"        • Not used for Actual ranges")
+                        log_message += f"        • Not used for Actual ranges\n"
                     
                     # Final Total
                     final_total = normalize_value(processed_payroll[range_name].get(dept_code, 0))
-                    print(f"\n     ✅ FINAL PAYROLL TOTAL: ${final_total:,.2f}")
+                    log_message += f"\n     ✅ FINAL PAYROLL TOTAL: ${final_total:,.2f}\n"
                     
                     # Show breakdown based on range type
                     if is_prior_year:
-                        print(f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll")
+                        log_message += f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll\n"
                     else:
-                        print(f"        Breakdown: Contract Payroll (${contract_total:,.2f}) + (Salary Rate × {days_in_range} days = ${salary_total:,.2f}) = ${final_total:,.2f}")
+                        log_message += f"        Breakdown: Contract Payroll (${contract_total:,.2f}) + (Salary Rate × {days_in_range} days = ${salary_total:,.2f}) = ${final_total:,.2f}\n"
             
-            print(f"\n{'='*80}\n")
-
-        # Debug: Print final department code to title mapping (shown in both simple and verbose modes)
-        if debug in ['simple', 'verbose']:
-            print(f"\n{'='*70}")
-            print(f"  [DEBUG] Final Department Code to Title Mapping")
-            print(f"{'='*70}")
-            if department_code_to_title:
-                for dept_code, dept_title in sorted(department_code_to_title.items()):
-                    print(f"    {dept_code} -> {dept_title}")
-            else:
-                print("    (No mappings found)")
-            print(f"{'='*70}\n")
+            log_message += f"\n{'='*80}\n"
+            
+            # Print to console (always show payroll breakdown)
+            print(log_message, end='')
+            
+            # Write to debug log file if debug is enabled
+            if debug_log_file:
+                debug_log_file.write(log_message)
+                debug_log_file.flush()
 
         # 4. Write to Excel
-        filename = f"{resort_name}_Report_{self.timestamp}.xlsx"
+        # Create report filename using run_date instead of timestamp
+        sanitized_resort = self._sanitize_filename(resort_name)
+        if file_name_postfix:
+            filename = f"{sanitized_resort}_Report_{report_date_str}-{file_name_postfix}.xlsx"
+        else:
+            filename = f"{sanitized_resort}_Report_{report_date_str}.xlsx"
         filepath = os.path.join(self.output_dir, filename)
         
         workbook = xlsxwriter.Workbook(filepath)
@@ -997,5 +984,11 @@ class ReportGenerator:
             
         workbook.close()
         print(f"✓ Report saved: {filepath}")
+        
+        # Close debug log file if it was opened
+        if debug_log_file:
+            debug_log_file.close()
+            print(f"✓ Debug log file closed")
+        
         return filepath
 
