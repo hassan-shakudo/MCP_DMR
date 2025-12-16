@@ -12,7 +12,7 @@ from typing import Dict, Any, Union
 from db_connection import DatabaseConnection
 from stored_procedures import StoredProcedures
 from data_utils import DateRangeCalculator
-from config import CandidateColumns
+from config import CandidateColumns, VISITS_DEPT_CODE_MAPPING
 
 
 class ReportGenerator:
@@ -363,6 +363,7 @@ class ReportGenerator:
         # Processed data structure: category -> range -> key -> value
         processed_snow = {range_name: {'snow_24hrs': 0.0, 'base_depth': 0.0} for range_name in range_names}
         processed_visits = {range_name: {} for range_name in range_names} # location -> sum
+        processed_visits_budget = {range_name: {} for range_name in range_names} # processed_location -> budget_amount
         processed_revenue = {range_name: {} for range_name in range_names} # department -> sum
         processed_payroll = {range_name: {} for range_name in range_names} # department -> sum
         processed_budget = {range_name: {} for range_name in range_names} # department -> {'Payroll': amount, 'Revenue': amount}
@@ -389,6 +390,38 @@ class ReportGenerator:
             if code is None:
                 return ""
             return str(code).strip()
+        
+        # Helper to process location names for budget matching
+        def process_location_name(location_name, resort_name):
+            """
+            Process location name for budget matching:
+            1. Convert to lowercase
+            2. Remove resort name from the beginning (with optional space/separator)
+            3. Strip whitespace
+            
+            Args:
+                location_name: Original location name (e.g., "PURGATORY Passes", "PURGATORYPasses")
+                resort_name: Resort name to remove (e.g., "PURGATORY")
+            
+            Returns:
+                Processed location name (e.g., "passes")
+            """
+            if location_name is None:
+                return ""
+            
+            location_lower = str(location_name).lower().strip()
+            resort_lower = resort_name.lower().strip()
+            
+            # Remove resort name from the beginning if present
+            # Handle both "resortname location" and "resortnamelocation" formats
+            if location_lower.startswith(resort_lower):
+                # Remove resort name and any following whitespace/separators
+                remaining = location_lower[len(resort_lower):].strip()
+                # Also handle case where there's no space (e.g., "purgatorypasses" -> "passes")
+                # But if there's a space, we want to keep it for now, then strip
+                return remaining
+            
+            return location_lower
         
         # Helper function to calculate days in a date range
         def calculate_days_in_range(start_date: datetime, end_date: datetime) -> int:
@@ -750,19 +783,38 @@ class ReportGenerator:
                     if budget_dept_column and budget_type_column and budget_amount_column:
                         # Initialize budget structure for this range
                         processed_budget[range_name] = {}
+                        processed_visits_budget[range_name] = {}
                         
+                        # Process visits budget data (filter by type = "Visits")
+                        visits_budget_rows = budget_dataframe[
+                            budget_dataframe[budget_type_column].astype(str).str.lower().str.strip() == 'visits'
+                        ]
+                        
+                        for _, row in visits_budget_rows.iterrows():
+                            dept_code = trim_dept_code(row[budget_dept_column])
+                            budget_amount = normalize_value(row[budget_amount_column])
+                            
+                            if dept_code and dept_code in VISITS_DEPT_CODE_MAPPING:
+                                processed_location_name = VISITS_DEPT_CODE_MAPPING[dept_code]
+                                processed_visits_budget[range_name][processed_location_name] = budget_amount
+                        
+                        # Process financial budget data (Payroll and Revenue)
                         for _, row in budget_dataframe.iterrows():
                             dept_code = trim_dept_code(row[budget_dept_column])
                             budget_type = str(row[budget_type_column]).strip() if pd.notna(row[budget_type_column]) else ""
                             budget_amount = normalize_value(row[budget_amount_column])
                             
                             if dept_code:
+                                # Skip visits type - already processed above
+                                budget_type_lower = budget_type.lower()
+                                if 'visits' in budget_type_lower:
+                                    continue
+                                
                                 # Initialize department budget dict if not exists
                                 if dept_code not in processed_budget[range_name]:
                                     processed_budget[range_name][dept_code] = {'Payroll': 0.0, 'Revenue': 0.0}
                                 
                                 # Match by type (case-insensitive)
-                                budget_type_lower = budget_type.lower()
                                 if 'payroll' in budget_type_lower:
                                     processed_budget[range_name][dept_code]['Payroll'] = budget_amount
                                 elif 'revenue' in budget_type_lower:
@@ -778,6 +830,7 @@ class ReportGenerator:
                 else:
                     # Empty budget dataframe - initialize empty structure
                     processed_budget[range_name] = {}
+                    processed_visits_budget[range_name] = {}
             
             # Step 6: Log detailed payroll breakdown for each department (save to debug log if debug enabled)
             log_message = f"\n{'='*80}\n"
@@ -962,7 +1015,13 @@ class ReportGenerator:
         for location in sorted_locations:
             worksheet.write(current_row, 0, location, row_header_fmt)
             for column_index, col_name in enumerate(column_structure):
-                if not col_name.endswith(" (Budget)"):
+                if col_name.endswith(" (Budget)"):
+                    # Budget column - get budget for processed location name
+                    actual_range_name = col_name.replace(" (Budget)", "")
+                    processed_location = process_location_name(location, resort_name)
+                    budget_value = normalize_value(processed_visits_budget.get(actual_range_name, {}).get(processed_location, 0))
+                    worksheet.write(current_row, column_index + 1, budget_value, data_fmt)
+                else:
                     range_name = col_name
                     value = normalize_value(processed_visits[range_name].get(location, 0))
                     worksheet.write(current_row, column_index + 1, value, data_fmt)
@@ -971,7 +1030,12 @@ class ReportGenerator:
         # Total Visits
         worksheet.write(current_row, 0, "Total Tickets", header_fmt)
         for column_index, col_name in enumerate(column_structure):
-            if not col_name.endswith(" (Budget)"):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - sum all budget values for this range
+                actual_range_name = col_name.replace(" (Budget)", "")
+                budget_total = normalize_value(sum(processed_visits_budget.get(actual_range_name, {}).values()))
+                worksheet.write(current_row, column_index + 1, budget_total, data_fmt)
+            else:
                 range_name = col_name
                 total = normalize_value(sum(processed_visits[range_name].values()))
                 worksheet.write(current_row, column_index + 1, total, data_fmt)
