@@ -55,8 +55,9 @@ class DatabaseConfig:
 STORED_PROCEDURES: Dict[str, str] = {
     'Revenue': 'exec Shakudo_DMRGetRevenue @database=?, @group_no=?, @date_ini=?, @date_end=?',
     'PayrollContract': 'exec Shakudo_DMRGetPayroll @resort=?, @date_ini=?, @date_end=?',
-    'PayrollSalaryActive': 'exec Shakudo_DMRGetPayrollSalary @resort=?',
+    'PayrollSalaryActive': 'exec Shakudo_DMRGetPayrollSalary @resort=?, @date_ini=?, @date_end=?',
     'PayrollSalaryHistory': 'exec Shakudo_DMRGetPayrollHistory @resort=?, @date_ini=?, @date_end=?',
+    'Budget': 'exec Shakudo_DMRBudget @resort=?, @date_ini=?, @date_end=?',
     'Visits': 'exec Shakudo_DMRGetVists @resort=?, @date_ini=?, @date_end=?',
     'Weather': 'exec Shakudo_GetSnow @resort=?, @date_ini=?, @date_end=?'
 }
@@ -88,12 +89,12 @@ CandidateColumns = SimpleNamespace(
     location=['Location', 'location', 'Resort', 'resort'],
     visits=['Visits', 'visits', 'Count', 'count'],
     
-    # Department Columns (used across Revenue, Payroll, Salary Payroll, History Payroll)
-    department=[
+    # Department Columns (used across Revenue, Payroll, Salary Payroll, History Payroll, Budget)
+    departmentCode=[
         'Department', 'department', 
         'DepartmentCode', 'department_code', 
         'deptCode', 'DeptCode', 'dept_code',
-        'Dept', 'dept'
+        'Dept', 'dept', 'deptcode'
     ],
     departmentTitle=[
         'DepartmentTitle', 'department_title', 
@@ -111,11 +112,14 @@ CandidateColumns = SimpleNamespace(
     payrollDollarAmount=['dollaramount', 'DollarAmount', 'dollar_amount', 'Dollar_Amount'],
     
     # Salary Payroll Data Columns
-    salaryDeptcode=['deptcode', 'DeptCode', 'dept_code', 'Department', 'department'],
     salaryRatePerDay=['rate_per_day', 'RatePerDay', 'Rate'],
+    salaryTotal=['total', 'Total', 'amount', 'Amount'],
+    
+    # Budget Data Columns
+    budgetType=['Type', 'type'],
+    budgetAmount=['Amount', 'amount'],
     
     # History Payroll Data Columns
-    historyDepartment=['department', 'Department', 'Dept', 'dept'],
     historyTotal=['total', 'Total', 'amount', 'Amount']
 )
 

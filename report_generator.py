@@ -77,7 +77,7 @@ class ReportGenerator:
             dept_col = None
             dataframe_columns_lower = [col.lower() for col in dataframe.columns]
             
-            for candidate in CandidateColumns.department:
+            for candidate in CandidateColumns.departmentCode:
                 # Try exact match first
                 if candidate in dataframe.columns:
                     dept_col = candidate
@@ -253,24 +253,8 @@ class ReportGenerator:
         # 2. Fetch Data for all ranges
         data_store = {name: {} for name in range_names}
         
-        # Fetch salary payroll data once (rate_per_day per department)
-        salary_payroll_data = None
-        
         with DatabaseConnection() as conn:
             stored_procedures = StoredProcedures(conn)
-            
-            # Fetch salary payroll once per resort
-            # Skip if current date (payroll will be set to 0)
-            if not is_current_date:
-                print(f"   ⏳ Fetching salary payroll data for {resort_name}...")
-                salary_payroll_data = stored_procedures.execute_payroll_salary(resort_name)
-                # Export Salary Payroll SP result (not range-specific, so use a generic range name)
-                if debug and not salary_payroll_data.empty:
-                    export_path = self._export_sp_result(salary_payroll_data, "SalaryPayroll", "PayrollSalary", resort_name, debug_dir)
-                    print(f"      💾 Exported Salary Payroll data: {os.path.basename(export_path)}")
-            else:
-                print(f"   ⏭️  Skipping salary payroll data fetch (current date - payroll will be 0)")
-                salary_payroll_data = None
             
             for range_name in range_names:
                 start, end = ranges[range_name]
@@ -302,6 +286,39 @@ class ReportGenerator:
                 else:
                     # Set empty DataFrame for payroll when current date
                     data_store[range_name]['payroll'] = pd.DataFrame()
+                
+                # Salary Payroll - fetch for each range (skip if current date)
+                if not is_current_date:
+                    # For Actual ranges: fetch salary payroll for the range
+                    if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                     "Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                        salary_payroll_dataframe = stored_procedures.execute_payroll_salary(resort_name, start, end)
+                        data_store[range_name]['salary_payroll'] = salary_payroll_dataframe
+                        
+                        # Export Salary Payroll SP result
+                        if debug and not salary_payroll_dataframe.empty:
+                            export_path = self._export_sp_result(salary_payroll_dataframe, range_name, "PayrollSalary", resort_name, debug_dir)
+                            print(f"      💾 Exported Salary Payroll data: {os.path.basename(export_path)}")
+                    else:
+                        # Prior Year ranges - no salary payroll data needed
+                        data_store[range_name]['salary_payroll'] = pd.DataFrame()
+                else:
+                    # Set empty DataFrame for salary payroll when current date
+                    data_store[range_name]['salary_payroll'] = pd.DataFrame()
+                
+                # Budget - fetch for Actual ranges only
+                if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                                 "Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                    budget_dataframe = stored_procedures.execute_budget(resort_name, start, end)
+                    data_store[range_name]['budget'] = budget_dataframe
+                    
+                    # Export Budget SP result
+                    if debug and not budget_dataframe.empty:
+                        export_path = self._export_sp_result(budget_dataframe, range_name, "Budget", resort_name, debug_dir)
+                        print(f"      💾 Exported Budget data: {os.path.basename(export_path)}")
+                else:
+                    # Prior Year ranges - no budget data needed
+                    data_store[range_name]['budget'] = pd.DataFrame()
                 
                 # Visits
                 visits_dataframe = stored_procedures.execute_visits(resort_name, start, end)
@@ -348,6 +365,7 @@ class ReportGenerator:
         processed_visits = {range_name: {} for range_name in range_names} # location -> sum
         processed_revenue = {range_name: {} for range_name in range_names} # department -> sum
         processed_payroll = {range_name: {} for range_name in range_names} # department -> sum
+        processed_budget = {range_name: {} for range_name in range_names} # department -> {'Payroll': amount, 'Revenue': amount}
         
         # Helper to guess column names if they vary
         def get_col(dataframe, candidates):
@@ -371,41 +389,6 @@ class ReportGenerator:
             if code is None:
                 return ""
             return str(code).strip()
-        
-        # Process salary payroll data into a dictionary: deptcode -> rate_per_day
-        salary_payroll_rates = {}
-        if salary_payroll_data is not None and not salary_payroll_data.empty:
-            deptcode_column = get_col(salary_payroll_data, CandidateColumns.salaryDeptcode)
-            rate_column = get_col(salary_payroll_data, CandidateColumns.salaryRatePerDay)
-            title_column = get_col(salary_payroll_data, CandidateColumns.departmentTitle)
-            
-            if deptcode_column and rate_column:
-                for _, row in salary_payroll_data.iterrows():
-                    dept_code = trim_dept_code(row[deptcode_column])
-                    rate_per_day = normalize_value(row[rate_column])
-                    
-                    if dept_code:
-                        salary_payroll_rates[dept_code] = rate_per_day
-                        
-                        # Also update department_code_to_title if available
-                        if title_column and title_column in row:
-                            title = str(row[title_column]).strip() if pd.notna(row[title_column]) else ""
-                            if dept_code:
-                                if dept_code not in department_code_to_title:
-                                    if title:
-                                        department_code_to_title[dept_code] = title
-                                    else:
-                                        # Warning: Empty/null title found
-                                        print(f"    ⚠️  [WARN] Empty/null title for department code '{dept_code}' in salary payroll data")
-                                        print(f"       Salary payroll row: {row.to_dict()}")
-                                elif not title:
-                                    # Warning: Title exists in mapping but current row has empty title
-                                    print(f"    ⚠️  [WARN] Empty/null title for department code '{dept_code}' in salary payroll data (mapping already exists)")
-                                    print(f"       Salary payroll row: {row.to_dict()}")
-                
-                if debug:
-                    print(f"      [DEBUG] Salary payroll rates: {salary_payroll_rates}")
-                    print(f"      [DEBUG] Department code to title mapping (from salary payroll): {department_code_to_title}")
         
         # Helper function to calculate days in a date range
         def calculate_days_in_range(start_date: datetime, end_date: datetime) -> int:
@@ -463,7 +446,7 @@ class ReportGenerator:
             revenue_dataframe = data_store[range_name]['revenue']
             if not revenue_dataframe.empty:
                 # Find department code and title columns
-                department_code_column = get_col(revenue_dataframe, CandidateColumns.department) or 'department'
+                department_code_column = get_col(revenue_dataframe, CandidateColumns.departmentCode) or 'department'
                 department_title_column = get_col(revenue_dataframe, CandidateColumns.departmentTitle) or 'DepartmentTitle'
                 revenue_column = get_col(revenue_dataframe, CandidateColumns.revenue) or 'revenue'
                 
@@ -517,7 +500,7 @@ class ReportGenerator:
                             
                             # Find matching rows in payroll dataframe (if available)
                             if not payroll_dataframe.empty:
-                                payroll_dept_col = get_col(payroll_dataframe, CandidateColumns.department)
+                                payroll_dept_col = get_col(payroll_dataframe, CandidateColumns.departmentCode)
                                 if payroll_dept_col:
                                     payroll_matches = payroll_dataframe[
                                         payroll_dataframe[payroll_dept_col].apply(lambda x: trim_dept_code(x) == department_string)
@@ -565,7 +548,7 @@ class ReportGenerator:
                 
                 if not payroll_dataframe.empty:
                     # Need columns: Department, start_punchtime, end_punchtime, rate, hours, dollaramount
-                    department_column = get_col(payroll_dataframe, CandidateColumns.department) or 'department'
+                    department_column = get_col(payroll_dataframe, CandidateColumns.departmentCode) or 'department'
                     department_title_column = get_col(payroll_dataframe, CandidateColumns.departmentTitle)
                     start_column = get_col(payroll_dataframe, CandidateColumns.payrollStartTime)
                     end_column = get_col(payroll_dataframe, CandidateColumns.payrollEndTime)
@@ -635,7 +618,7 @@ class ReportGenerator:
                                 
                                 # Find matching rows in revenue dataframe (if available)
                                 if not revenue_dataframe.empty:
-                                    revenue_dept_col = get_col(revenue_dataframe, CandidateColumns.department)
+                                    revenue_dept_col = get_col(revenue_dataframe, CandidateColumns.departmentCode)
                                     if revenue_dept_col:
                                         revenue_matches = revenue_dataframe[
                                             revenue_dataframe[revenue_dept_col].apply(lambda x: trim_dept_code(x) == department)
@@ -688,7 +671,7 @@ class ReportGenerator:
                 # Step 2: Process history payroll data
                 history_payroll_dataframe = data_store[range_name]['payroll_history']
                 if history_payroll_dataframe is not None and not history_payroll_dataframe.empty:
-                    history_dept_column = get_col(history_payroll_dataframe, CandidateColumns.historyDepartment) or 'department'
+                    history_dept_column = get_col(history_payroll_dataframe, CandidateColumns.departmentCode) or 'department'
                     history_total_column = get_col(history_payroll_dataframe, CandidateColumns.historyTotal)
                     
                     if history_dept_column and history_total_column:
@@ -698,21 +681,48 @@ class ReportGenerator:
                             if dept_code:
                                 history_payroll[dept_code] = total
                 
-                # Step 3: Apply simplified payroll logic based on range type
+                # Step 3: Process salary payroll data for this range
+                salary_payroll_dataframe = data_store[range_name]['salary_payroll']
+                salary_totals_by_dept_range = {}  # dept_code -> salary_total for this range
+                
+                if not salary_payroll_dataframe.empty:
+                    deptcode_column = get_col(salary_payroll_dataframe, CandidateColumns.departmentCode)
+                    total_column = get_col(salary_payroll_dataframe, CandidateColumns.salaryTotal)
+                    title_column = get_col(salary_payroll_dataframe, CandidateColumns.departmentTitle)
+                    
+                    if deptcode_column and total_column:
+                        for _, row in salary_payroll_dataframe.iterrows():
+                            dept_code = trim_dept_code(row[deptcode_column])
+                            salary_total = normalize_value(row[total_column])
+                            
+                            if dept_code:
+                                salary_totals_by_dept_range[dept_code] = salary_total
+                                salary_totals_by_dept[dept_code] = salary_total
+                                
+                                # Also update department_code_to_title if available
+                                if title_column and title_column in row:
+                                    title = str(row[title_column]).strip() if pd.notna(row[title_column]) else ""
+                                    if dept_code:
+                                        if dept_code not in department_code_to_title:
+                                            if title:
+                                                department_code_to_title[dept_code] = title
+                                        elif not title and dept_code in department_code_to_title:
+                                            # Title already exists, keep it
+                                            pass
+                
+                # Step 4: Apply simplified payroll logic based on range type
                 if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
                                  "Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                    # For all Actual ranges: (Salary × number of days) + Payroll data for that whole range
+                    # For all Actual ranges: Salary total (from SP) + Payroll data for that whole range
                     for dept_code, calculated_wages in calculated_payroll.items():
-                        salary_rate = salary_payroll_rates.get(dept_code, 0)
-                        salary_total = normalize_value(salary_rate) * days_in_range
+                        salary_total = salary_totals_by_dept_range.get(dept_code, 0)
                         salary_totals_by_dept[dept_code] = salary_total
                         total_payroll = normalize_value(calculated_wages) + salary_total
                         processed_payroll[range_name][dept_code] = total_payroll
                     
                     # Add departments that only have salary payroll
-                    for dept_code, salary_rate in salary_payroll_rates.items():
+                    for dept_code, salary_total in salary_totals_by_dept_range.items():
                         if dept_code not in processed_payroll[range_name]:
-                            salary_total = normalize_value(salary_rate) * days_in_range
                             salary_totals_by_dept[dept_code] = salary_total
                             processed_payroll[range_name][dept_code] = salary_total
                             all_departments.add(dept_code)
@@ -726,7 +736,50 @@ class ReportGenerator:
                         processed_payroll[range_name][dept_code] = normalize_value(history_total)
                         all_departments.add(dept_code)
             
-            # Step 5: Log detailed payroll breakdown for each department (save to debug log if debug enabled)
+            # Step 5: Process Budget data (only for Actual ranges)
+            if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                             "Month to Date (Actual)", "For Winter Ending (Actual)"]:
+                budget_dataframe = data_store[range_name]['budget']
+                
+                if not budget_dataframe.empty:
+                    budget_dept_column = get_col(budget_dataframe, CandidateColumns.departmentCode)
+                    budget_type_column = get_col(budget_dataframe, CandidateColumns.budgetType)
+                    budget_amount_column = get_col(budget_dataframe, CandidateColumns.budgetAmount)
+                    budget_title_column = get_col(budget_dataframe, CandidateColumns.departmentTitle)
+                    
+                    if budget_dept_column and budget_type_column and budget_amount_column:
+                        # Initialize budget structure for this range
+                        processed_budget[range_name] = {}
+                        
+                        for _, row in budget_dataframe.iterrows():
+                            dept_code = trim_dept_code(row[budget_dept_column])
+                            budget_type = str(row[budget_type_column]).strip() if pd.notna(row[budget_type_column]) else ""
+                            budget_amount = normalize_value(row[budget_amount_column])
+                            
+                            if dept_code:
+                                # Initialize department budget dict if not exists
+                                if dept_code not in processed_budget[range_name]:
+                                    processed_budget[range_name][dept_code] = {'Payroll': 0.0, 'Revenue': 0.0}
+                                
+                                # Match by type (case-insensitive)
+                                budget_type_lower = budget_type.lower()
+                                if 'payroll' in budget_type_lower:
+                                    processed_budget[range_name][dept_code]['Payroll'] = budget_amount
+                                elif 'revenue' in budget_type_lower:
+                                    processed_budget[range_name][dept_code]['Revenue'] = budget_amount
+                                
+                                # Also update department_code_to_title if available
+                                if budget_title_column and budget_title_column in row:
+                                    title = str(row[budget_title_column]).strip() if pd.notna(row[budget_title_column]) else ""
+                                    if dept_code:
+                                        if dept_code not in department_code_to_title:
+                                            if title:
+                                                department_code_to_title[dept_code] = title
+                else:
+                    # Empty budget dataframe - initialize empty structure
+                    processed_budget[range_name] = {}
+            
+            # Step 6: Log detailed payroll breakdown for each department (save to debug log if debug enabled)
             log_message = f"\n{'='*80}\n"
             log_message += f"  📊 PAYROLL CALCULATION BREAKDOWN - {range_name}\n"
             if is_current_date:
@@ -773,11 +826,9 @@ class ReportGenerator:
                         log_message += f"        • Aggregated Contract Payroll Total: $0.00\n"
                     
                     # Salary Payroll Details
-                    salary_rate = salary_payroll_rates.get(dept_code, 0)
                     salary_total = salary_totals_by_dept.get(dept_code, 0)
                     
                     log_message += f"\n     💰 Salary Payroll:\n"
-                    log_message += f"        • Daily Salary Rate: ${salary_rate:,.2f}\n"
                     
                     # Show salary total based on range type
                     if is_current_date:
@@ -786,7 +837,7 @@ class ReportGenerator:
                         # Prior Year ranges don't use salary payroll
                         log_message += f"        • Salary for Range: $0.00 (Prior Year - not applicable)\n"
                     else:
-                        log_message += f"        • Salary for Range ({days_in_range} days): ${salary_total:,.2f}\n"
+                        log_message += f"        • Salary for Range: ${salary_total:,.2f}\n"
                     
                     # History Payroll Details
                     history_total = normalize_value(history_payroll.get(dept_code, 0))
@@ -807,7 +858,7 @@ class ReportGenerator:
                     if is_prior_year:
                         log_message += f"        Breakdown: History Only (${history_total:,.2f}) - Prior Year ranges use only history payroll\n"
                     else:
-                        log_message += f"        Breakdown: Contract Payroll (${contract_total:,.2f}) + (Salary Rate × {days_in_range} days = ${salary_total:,.2f}) = ${final_total:,.2f}\n"
+                        log_message += f"        Breakdown: Contract Payroll (${contract_total:,.2f}) + Salary Total (${salary_total:,.2f}) = ${final_total:,.2f}\n"
             
             log_message += f"\n{'='*80}\n"
             
@@ -850,10 +901,31 @@ class ReportGenerator:
         top_left_text = f"{resort_name} Resort\nDaily Management Report\nAs of {day_name} - {day_date}"
         worksheet.write(0, 0, top_left_text, header_fmt)
         
+        # Create column mapping: includes Actual ranges and their Budget columns
+        # Actual ranges: "For The Day (Actual)", "For The Week Ending (Actual)", 
+        #                "Month to Date (Actual)", "For Winter Ending (Actual)"
+        actual_ranges = ["For The Day (Actual)", "For The Week Ending (Actual)", 
+                        "Month to Date (Actual)", "For Winter Ending (Actual)"]
+        
+        # Build column structure: [range1, range1_budget, range2, range2_budget, ...]
+        column_structure = []
+        for range_name in range_names:
+            column_structure.append(range_name)
+            # Add budget column after each Actual range
+            if range_name in actual_ranges:
+                column_structure.append(f"{range_name} (Budget)")
+        
         # Write Column Headers
-        for column_index, range_name in enumerate(range_names):
-            start, end = ranges[range_name]
-            header_text = f"{range_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+        for column_index, col_name in enumerate(column_structure):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - use same date range as the corresponding Actual range
+                actual_range_name = col_name.replace(" (Budget)", "")
+                start, end = ranges[actual_range_name]
+                header_text = f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+            else:
+                # Regular range column
+                start, end = ranges[col_name]
+                header_text = f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
             worksheet.write(0, column_index + 1, header_text, header_fmt)
             worksheet.set_column(column_index + 1, column_index + 1, 18) # Set width
 
@@ -866,15 +938,19 @@ class ReportGenerator:
         
         # --- Snow Section ---
         worksheet.write(current_row, 0, "Snow 24hrs", row_header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            value = normalize_value(processed_snow[range_name]['snow_24hrs'])
-            worksheet.write(current_row, column_index + 1, value, snow_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if not col_name.endswith(" (Budget)"):
+                range_name = col_name
+                value = normalize_value(processed_snow[range_name]['snow_24hrs'])
+                worksheet.write(current_row, column_index + 1, value, snow_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Base Depth", row_header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            value = normalize_value(processed_snow[range_name]['base_depth'])
-            worksheet.write(current_row, column_index + 1, value, snow_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if not col_name.endswith(" (Budget)"):
+                range_name = col_name
+                value = normalize_value(processed_snow[range_name]['base_depth'])
+                worksheet.write(current_row, column_index + 1, value, snow_fmt)
         current_row += 2 # Spacer
         
         # --- Visits Section ---
@@ -885,16 +961,20 @@ class ReportGenerator:
         
         for location in sorted_locations:
             worksheet.write(current_row, 0, location, row_header_fmt)
-            for column_index, range_name in enumerate(range_names):
-                value = normalize_value(processed_visits[range_name].get(location, 0))
-                worksheet.write(current_row, column_index + 1, value, data_fmt)
+            for column_index, col_name in enumerate(column_structure):
+                if not col_name.endswith(" (Budget)"):
+                    range_name = col_name
+                    value = normalize_value(processed_visits[range_name].get(location, 0))
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
         # Total Visits
         worksheet.write(current_row, 0, "Total Tickets", header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            total = normalize_value(sum(processed_visits[range_name].values()))
-            worksheet.write(current_row, column_index + 1, total, data_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if not col_name.endswith(" (Budget)"):
+                range_name = col_name
+                total = normalize_value(sum(processed_visits[range_name].values()))
+                worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 2
         
         # --- Financials Section ---
@@ -918,69 +998,157 @@ class ReportGenerator:
             
             # Revenue Row - show revenue for this department (0 if not in revenue)
             worksheet.write(current_row, 0, f"{department_title} - Revenue", row_header_fmt)
-            for column_index, range_name in enumerate(range_names):
-                value = normalize_value(processed_revenue[range_name].get(trimmed_code, 0))
-                worksheet.write(current_row, column_index + 1, value, data_fmt)
+            for column_index, col_name in enumerate(column_structure):
+                if col_name.endswith(" (Budget)"):
+                    # Budget column - get budget revenue for corresponding Actual range
+                    actual_range_name = col_name.replace(" (Budget)", "")
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    value = normalize_value(budget_data.get('Revenue', 0))
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
+                else:
+                    range_name = col_name
+                    value = normalize_value(processed_revenue[range_name].get(trimmed_code, 0))
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
             # Payroll Row - show payroll for this department
             worksheet.write(current_row, 0, f"{department_title} - Payroll", row_header_fmt)
-            for column_index, range_name in enumerate(range_names):
-                value = normalize_value(processed_payroll[range_name].get(trimmed_code, 0))
-                worksheet.write(current_row, column_index + 1, value, data_fmt)
+            for column_index, col_name in enumerate(column_structure):
+                if col_name.endswith(" (Budget)"):
+                    # Budget column - get budget payroll for corresponding Actual range
+                    actual_range_name = col_name.replace(" (Budget)", "")
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    value = normalize_value(budget_data.get('Payroll', 0))
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
+                else:
+                    range_name = col_name
+                    value = normalize_value(processed_payroll[range_name].get(trimmed_code, 0))
+                    worksheet.write(current_row, column_index + 1, value, data_fmt)
             current_row += 1
             
             # PR% Row: (Revenue / Payroll) × 100, ignoring negative signs
             worksheet.write(current_row, 0, f"PR % of {department_title}", row_header_fmt)
-            for column_index, range_name in enumerate(range_names):
-                revenue = abs(normalize_value(processed_revenue[range_name].get(trimmed_code, 0)))
-                payroll = abs(normalize_value(processed_payroll[range_name].get(trimmed_code, 0)))
-                
-                # If either revenue or payroll is 0, show 0%
-                if revenue == 0 or payroll == 0:
-                    percentage = 0
+            for column_index, col_name in enumerate(column_structure):
+                if col_name.endswith(" (Budget)"):
+                    # Budget column - calculate PR% from budget data
+                    actual_range_name = col_name.replace(" (Budget)", "")
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    budget_revenue = abs(normalize_value(budget_data.get('Revenue', 0)))
+                    budget_payroll = abs(normalize_value(budget_data.get('Payroll', 0)))
+                    
+                    # If either revenue or payroll is 0, show 0%
+                    if budget_revenue == 0 or budget_payroll == 0:
+                        percentage = 0
+                    else:
+                        percentage = abs((budget_revenue / budget_payroll) * 100)  # Ensure non-negative
+                    
+                    worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
                 else:
-                    percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
-                
-                worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
+                    range_name = col_name
+                    revenue = abs(normalize_value(processed_revenue[range_name].get(trimmed_code, 0)))
+                    payroll = abs(normalize_value(processed_payroll[range_name].get(trimmed_code, 0)))
+                    
+                    # If either revenue or payroll is 0, show 0%
+                    if revenue == 0 or payroll == 0:
+                        percentage = 0
+                    else:
+                        percentage = abs((revenue / payroll) * 100)  # Ensure non-negative
+                    
+                    worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
             current_row += 1
         
         # Totals
         current_row += 1
         worksheet.write(current_row, 0, "Total Revenue", header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            total = normalize_value(sum(processed_revenue[range_name].values()))
-            worksheet.write(current_row, column_index + 1, total, data_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - sum budget revenue across all departments
+                actual_range_name = col_name.replace(" (Budget)", "")
+                budget_total = 0.0
+                for dept_code in sorted_payroll_departments:
+                    trimmed_code = trim_dept_code(dept_code)
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    budget_total += normalize_value(budget_data.get('Revenue', 0))
+                worksheet.write(current_row, column_index + 1, budget_total, data_fmt)
+            else:
+                range_name = col_name
+                total = normalize_value(sum(processed_revenue[range_name].values()))
+                worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 1
         
         worksheet.write(current_row, 0, "Total Payroll", header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            total = normalize_value(sum(processed_payroll[range_name].values()))
-            worksheet.write(current_row, column_index + 1, total, data_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - sum budget payroll across all departments
+                actual_range_name = col_name.replace(" (Budget)", "")
+                budget_total = 0.0
+                for dept_code in sorted_payroll_departments:
+                    trimmed_code = trim_dept_code(dept_code)
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    budget_total += normalize_value(budget_data.get('Payroll', 0))
+                worksheet.write(current_row, column_index + 1, budget_total, data_fmt)
+            else:
+                range_name = col_name
+                total = normalize_value(sum(processed_payroll[range_name].values()))
+                worksheet.write(current_row, column_index + 1, total, data_fmt)
         current_row += 1
         
         # PR % of Total Revenue
         worksheet.write(current_row, 0, "PR % of Total Revenue", header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            total_revenue = abs(normalize_value(sum(processed_revenue[range_name].values())))
-            total_payroll = abs(normalize_value(sum(processed_payroll[range_name].values())))
-            
-            # If either revenue or payroll is 0, show 0%
-            if total_revenue == 0 or total_payroll == 0:
-                percentage = 0
+        for column_index, col_name in enumerate(column_structure):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - calculate PR% from budget totals
+                actual_range_name = col_name.replace(" (Budget)", "")
+                budget_revenue_total = 0.0
+                budget_payroll_total = 0.0
+                for dept_code in sorted_payroll_departments:
+                    trimmed_code = trim_dept_code(dept_code)
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    budget_revenue_total += abs(normalize_value(budget_data.get('Revenue', 0)))
+                    budget_payroll_total += abs(normalize_value(budget_data.get('Payroll', 0)))
+                
+                # If either revenue or payroll is 0, show 0%
+                if budget_revenue_total == 0 or budget_payroll_total == 0:
+                    percentage = 0
+                else:
+                    percentage = abs((budget_revenue_total / budget_payroll_total) * 100)  # Ensure non-negative
+                
+                worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
             else:
-                percentage = abs((total_revenue / total_payroll) * 100)  # Ensure non-negative
-            
-            worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
+                range_name = col_name
+                total_revenue = abs(normalize_value(sum(processed_revenue[range_name].values())))
+                total_payroll = abs(normalize_value(sum(processed_payroll[range_name].values())))
+                
+                # If either revenue or payroll is 0, show 0%
+                if total_revenue == 0 or total_payroll == 0:
+                    percentage = 0
+                else:
+                    percentage = abs((total_revenue / total_payroll) * 100)  # Ensure non-negative
+                
+                worksheet.write(current_row, column_index + 1, percentage, percent_fmt)
         current_row += 1
         
         # Net Total Revenue
         worksheet.write(current_row, 0, "Net Total Revenue", header_fmt)
-        for column_index, range_name in enumerate(range_names):
-            total_revenue = normalize_value(sum(processed_revenue[range_name].values()))
-            total_payroll = normalize_value(sum(processed_payroll[range_name].values()))
-            net_total = total_revenue - total_payroll
-            worksheet.write(current_row, column_index + 1, net_total, data_fmt)
+        for column_index, col_name in enumerate(column_structure):
+            if col_name.endswith(" (Budget)"):
+                # Budget column - calculate net from budget totals
+                actual_range_name = col_name.replace(" (Budget)", "")
+                budget_revenue_total = 0.0
+                budget_payroll_total = 0.0
+                for dept_code in sorted_payroll_departments:
+                    trimmed_code = trim_dept_code(dept_code)
+                    budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
+                    budget_revenue_total += normalize_value(budget_data.get('Revenue', 0))
+                    budget_payroll_total += normalize_value(budget_data.get('Payroll', 0))
+                net_total = budget_revenue_total - budget_payroll_total
+                worksheet.write(current_row, column_index + 1, net_total, data_fmt)
+            else:
+                range_name = col_name
+                total_revenue = normalize_value(sum(processed_revenue[range_name].values()))
+                total_payroll = normalize_value(sum(processed_payroll[range_name].values()))
+                net_total = total_revenue - total_payroll
+                worksheet.write(current_row, column_index + 1, net_total, data_fmt)
             
         workbook.close()
         print(f"✓ Report saved: {filepath}")

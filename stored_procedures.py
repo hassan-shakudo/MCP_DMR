@@ -78,20 +78,50 @@ class StoredProcedures:
     
     def execute_payroll_salary(self,
                                resort: str,
+                               date_ini: Union[datetime, str],
+                               date_end: Union[datetime, str],
                                return_dataframe: bool = True) -> Union[pd.DataFrame, List[Tuple]]:
         """
         Execute the Salary Payroll stored procedure (Shakudo_DMRGetPayrollSalary)
-        Returns per-day payroll rate for each department for salaried employees.
+        Returns total payroll for each department for salaried employees for the given date range.
         
         Args:
             resort: Resort name (e.g., 'Purgatory', 'Snowbowl')
+            date_ini: Start date (datetime or string 'YYYY-MM-DD')
+            date_end: End date (datetime or string 'YYYY-MM-DD HH:MM:SS')
             return_dataframe: If True, return pd.DataFrame; if False, return raw rows
             
         Returns:
-            Salary payroll data as DataFrame with columns: deptcode, DepartmentTitle, rate_per_day
+            Salary payroll data as DataFrame with columns: deptcode, DepartmentTitle, total
         """
         cursor = self.conn.cursor()
-        cursor.execute(self.procedures['PayrollSalaryActive'], (resort,))
+        cursor.execute(self.procedures['PayrollSalaryActive'], (resort, date_ini, date_end))
+        
+        if return_dataframe:
+            return pyodbc_rows_to_dataframe(cursor)
+        else:
+            return cursor.fetchall()
+    
+    def execute_budget(self,
+                      resort: str,
+                      date_ini: Union[datetime, str],
+                      date_end: Union[datetime, str],
+                      return_dataframe: bool = True) -> Union[pd.DataFrame, List[Tuple]]:
+        """
+        Execute the Budget stored procedure (Shakudo_DMRBudget)
+        Returns budget data for each department and type for the given date range.
+        
+        Args:
+            resort: Resort name (e.g., 'Purgatory', 'Snowbowl')
+            date_ini: Start date (datetime or string 'YYYY-MM-DD')
+            date_end: End date (datetime or string 'YYYY-MM-DD HH:MM:SS')
+            return_dataframe: If True, return pd.DataFrame; if False, return raw rows
+            
+        Returns:
+            Budget data as DataFrame with columns: Department, Type, Amount, DepartmentTitle
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(self.procedures['Budget'], (resort, date_ini, date_end))
         
         if return_dataframe:
             return pyodbc_rows_to_dataframe(cursor)
