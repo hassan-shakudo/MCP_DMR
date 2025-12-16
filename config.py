@@ -123,3 +123,11 @@ CandidateColumns = SimpleNamespace(
     historyTotal=['total', 'Total', 'amount', 'Amount']
 )
 
+# Visits Budget Mapping: department code -> processed location name
+# This mapping is used to match budget department codes with processed visit location names
+VISITS_DEPT_CODE_MAPPING: Dict[str, str] = {
+    '99100': 'tickets',
+    '99150': 'comp tickets',
+    '99200': 'passes'
+}
+
