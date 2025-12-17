@@ -440,7 +440,7 @@ class ReportGenerator:
         processed_snow = self._process_snow(data_store, range_names_ordered)
         processed_visits = self._process_visits(data_store, range_names_ordered, locations_set)
         processed_revenue = self._process_revenue(data_store, range_names_ordered, departments_set, code_to_title_map)
-        processed_payroll = self._process_payroll(data_store, range_names_ordered, ranges, is_current, 
+        processed_payroll = self._process_payroll(data_store, range_names_ordered, is_current, 
                                                  actual_range_names, processed_revenue, departments_set, 
                                                  code_to_title_map, debug_log_handle)
         processed_budget, processed_visits_budget = self._process_budget(data_store, range_names_ordered, 
