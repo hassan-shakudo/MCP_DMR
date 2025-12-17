@@ -120,7 +120,18 @@ class DateRangeCalculator:
         start = (prior_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
         
         # Calculate Sunday (end of week) - 6 days after Monday
-        end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=0)
+        
+        return start, end
+
+    def week_total_actual(self) -> Tuple[datetime, datetime]:
+        """Monday 00:00:00 to Sunday 23:59:59 of current week"""
+        # Monday is weekday 0
+        days_since_monday = self.base_date.weekday()
+        start = (self.base_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Calculate Sunday (end of week) - 6 days after Monday
+        end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=0)
         
         return start, end
 

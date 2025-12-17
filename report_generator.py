@@ -309,7 +309,15 @@ class ReportGenerator:
                 # Budget - fetch for Actual ranges only
                 if range_name in ["For The Day (Actual)", "For The Week Ending (Actual)", 
                                  "Month to Date (Actual)", "For Winter Ending (Actual)"]:
-                    budget_dataframe = stored_procedures.execute_budget(resort_name, start, end)
+                    
+                    # For the Weekly column, we need the budget for the full week (Monday-Sunday)
+                    # instead of just the week-to-date range.
+                    budget_start, budget_end = start, end
+                    if range_name == "For The Week Ending (Actual)":
+                        budget_start, budget_end = date_calc.week_total_actual()
+                        print(f"      📈 Fetching FULL WEEK budget for weekly column: {budget_start.date()} to {budget_end.date()}")
+                    
+                    budget_dataframe = stored_procedures.execute_budget(resort_name, budget_start, budget_end)
                     data_store[range_name]['budget'] = budget_dataframe
                     
                     # Export Budget SP result
@@ -966,14 +974,27 @@ class ReportGenerator:
             column_structure.append(range_name)
             # Add budget column after each Actual range
             if range_name in actual_ranges:
-                column_structure.append(f"{range_name} (Budget)")
+                if range_name == "For The Week Ending (Actual)":
+                    # Rename the weekly budget column as requested
+                    column_structure.append("Week Total (Actual) (Budget)")
+                else:
+                    column_structure.append(f"{range_name} (Budget)")
         
         # Write Column Headers
         for column_index, col_name in enumerate(column_structure):
             if col_name.endswith(" (Budget)"):
-                # Budget column - use same date range as the corresponding Actual range
+                # Budget column - get the corresponding Actual range name
                 actual_range_name = col_name.replace(" (Budget)", "")
-                start, end = ranges[actual_range_name]
+                
+                # Special handling for renamed weekly budget column
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    # For Week Total (Actual) (Budget), use the full week range for the header
+                    start, end = date_calc.week_total_actual()
+                else:
+                    # Regular budget column uses the same range as the actual data
+                    start, end = ranges[actual_range_name]
+                
                 header_text = f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
             else:
                 # Regular range column
@@ -1018,6 +1039,9 @@ class ReportGenerator:
                 if col_name.endswith(" (Budget)"):
                     # Budget column - get budget for processed location name
                     actual_range_name = col_name.replace(" (Budget)", "")
+                    if col_name == "Week Total (Actual) (Budget)":
+                        actual_range_name = "For The Week Ending (Actual)"
+                        
                     processed_location = process_location_name(location, resort_name)
                     budget_value = normalize_value(processed_visits_budget.get(actual_range_name, {}).get(processed_location, 0))
                     worksheet.write(current_row, column_index + 1, budget_value, data_fmt)
@@ -1033,6 +1057,9 @@ class ReportGenerator:
             if col_name.endswith(" (Budget)"):
                 # Budget column - sum all budget values for this range
                 actual_range_name = col_name.replace(" (Budget)", "")
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    
                 budget_total = normalize_value(sum(processed_visits_budget.get(actual_range_name, {}).values()))
                 worksheet.write(current_row, column_index + 1, budget_total, data_fmt)
             else:
@@ -1066,6 +1093,9 @@ class ReportGenerator:
                 if col_name.endswith(" (Budget)"):
                     # Budget column - get budget revenue for corresponding Actual range
                     actual_range_name = col_name.replace(" (Budget)", "")
+                    if col_name == "Week Total (Actual) (Budget)":
+                        actual_range_name = "For The Week Ending (Actual)"
+                        
                     budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
                     value = normalize_value(budget_data.get('Revenue', 0))
                     worksheet.write(current_row, column_index + 1, value, data_fmt)
@@ -1081,6 +1111,9 @@ class ReportGenerator:
                 if col_name.endswith(" (Budget)"):
                     # Budget column - get budget payroll for corresponding Actual range
                     actual_range_name = col_name.replace(" (Budget)", "")
+                    if col_name == "Week Total (Actual) (Budget)":
+                        actual_range_name = "For The Week Ending (Actual)"
+                        
                     budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
                     value = normalize_value(budget_data.get('Payroll', 0))
                     worksheet.write(current_row, column_index + 1, value, data_fmt)
@@ -1096,6 +1129,9 @@ class ReportGenerator:
                 if col_name.endswith(" (Budget)"):
                     # Budget column - calculate PR% from budget data
                     actual_range_name = col_name.replace(" (Budget)", "")
+                    if col_name == "Week Total (Actual) (Budget)":
+                        actual_range_name = "For The Week Ending (Actual)"
+                        
                     budget_data = processed_budget.get(actual_range_name, {}).get(trimmed_code, {})
                     budget_revenue = abs(normalize_value(budget_data.get('Revenue', 0)))
                     budget_payroll = abs(normalize_value(budget_data.get('Payroll', 0)))
@@ -1128,6 +1164,9 @@ class ReportGenerator:
             if col_name.endswith(" (Budget)"):
                 # Budget column - sum budget revenue across all departments
                 actual_range_name = col_name.replace(" (Budget)", "")
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    
                 budget_total = 0.0
                 for dept_code in sorted_payroll_departments:
                     trimmed_code = trim_dept_code(dept_code)
@@ -1145,6 +1184,9 @@ class ReportGenerator:
             if col_name.endswith(" (Budget)"):
                 # Budget column - sum budget payroll across all departments
                 actual_range_name = col_name.replace(" (Budget)", "")
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    
                 budget_total = 0.0
                 for dept_code in sorted_payroll_departments:
                     trimmed_code = trim_dept_code(dept_code)
@@ -1163,6 +1205,9 @@ class ReportGenerator:
             if col_name.endswith(" (Budget)"):
                 # Budget column - calculate PR% from budget totals
                 actual_range_name = col_name.replace(" (Budget)", "")
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    
                 budget_revenue_total = 0.0
                 budget_payroll_total = 0.0
                 for dept_code in sorted_payroll_departments:
@@ -1198,6 +1243,9 @@ class ReportGenerator:
             if col_name.endswith(" (Budget)"):
                 # Budget column - calculate net from budget totals
                 actual_range_name = col_name.replace(" (Budget)", "")
+                if col_name == "Week Total (Actual) (Budget)":
+                    actual_range_name = "For The Week Ending (Actual)"
+                    
                 budget_revenue_total = 0.0
                 budget_payroll_total = 0.0
                 for dept_code in sorted_payroll_departments:
