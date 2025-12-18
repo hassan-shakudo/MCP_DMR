@@ -14,11 +14,11 @@
 
 The MCP Daily Management Report system generates comprehensive Excel reports for ski resorts by:
 1. Calculating 9 different date ranges
-2. Executing stored procedures for each range to retrieve raw data
+2. Executing stored procedures for each range to retrieve raw data (Revenue, Visits, Snow, Payroll, and Budget)
 3. Processing and aggregating the data
-4. Mapping departments between revenue and payroll
+4. Mapping departments between revenue, payroll, and budget
 5. Calculating financial metrics (Revenue, Payroll, PR%)
-6. Exporting results to Excel with formatted rows and columns
+6. Exporting results to Excel with formatted rows and columns, including budget comparisons
 
 ---
 
@@ -132,15 +132,29 @@ For each date range, the system executes the following stored procedures:
 - **SP Name**: `Shakudo_DMRGetPayrollSalary`
 - **Parameters**:
   - `@resort`: Resort name
+  - `@date_ini`: Start date
+  - `@date_end`: End date
 - **Returns**: DataFrame with columns:
   - `deptcode` or `DeptCode`: Department code
   - `DepartmentTitle`: Department name
-  - `rate_per_day` or `RatePerDay`: Daily salary rate for salaried employees
-- **Data Structure**: One row per department with active salaried employees
-- **Export**: Exported as "SalaryPayroll_PayrollSalary.xlsx" (not range-specific)
-- **Note**: Fetched once per resort, not per range
+  - `total` or `amount`: Total salary amount for the period
+- **Data Structure**: One row per department with salaried employee totals
+- **Note**: Fetched for each actual range
 
-### 4. Payroll History Stored Procedure
+### 4. Budget Stored Procedure
+- **SP Name**: `Shakudo_DMRBudget`
+- **Parameters**:
+  - `@resort`: Resort name
+  - `@date_ini`: Start date
+  - `@date_end`: End date
+- **Returns**: DataFrame with columns:
+  - `departmentcode` or `DeptCode`: Department code
+  - `type`: Budget type ('Revenue', 'Payroll', or contains 'visits')
+  - `amount`: Budgeted amount
+- **Usage**: Provides comparison data for "Actual" ranges
+- **Note**: Fetched for each actual range
+
+### 5. Payroll History Stored Procedure
 - **SP Name**: `Shakudo_DMRGetPayrollHistory`
 - **Parameters**:
   - `@resort`: Resort name
@@ -150,11 +164,11 @@ For each date range, the system executes the following stored procedures:
   - `department` or `Department`: Department code
   - `total` or `Total`: Historical payroll total for the department
 - **Data Structure**: One row per department with aggregated historical totals
-- **Usage**: Used for date ranges older than 7 days (for Month to Date and Winter Ending ranges)
+- **Usage**: Used for Prior Year ranges
 - **Export**: Exported per range when applicable
 
-### 5. Visits Stored Procedure
-- **SP Name**: `Shakudo_DMRGetVists`
+### 6. Visits Stored Procedure
+- **SP Name**: `Shakudo_DMRGetVists` (Note: SP name contains a typo "Vists")
 - **Parameters**:
   - `@resort`: Resort name
   - `@date_ini`: Start date (datetime)
@@ -165,7 +179,7 @@ For each date range, the system executes the following stored procedures:
 - **Data Structure**: One row per location or aggregated visits per location
 - **Export**: Not sorted (no department column)
 
-### 6. Weather/Snow Stored Procedure
+### 7. Weather/Snow Stored Procedure
 - **SP Name**: `Shakudo_GetSnow`
 - **Parameters**:
   - `@resort`: Resort name
@@ -241,19 +255,19 @@ Total Tickets = SUM(all location visits)
 
 **Processing Steps**:
 1. **Identify Columns**:
-   - Department code: Look for `Department`, `department`, `DepartmentCode`, `department_code`, `deptCode`, `DeptCode`, `dept_code`, `Dept`, or `dept`
-   - Department title: Look for `DepartmentTitle`, `department_title`, `departmentTitle`, `DeptTitle`, or `dept_title`
-   - Revenue amount: Look for `Revenue`, `revenue`, `Amount`, or `amount`
+   - Department code: Uses `CandidateColumns.departmentCode` (flexible matching)
+   - Department title: Uses `CandidateColumns.departmentTitle` (flexible matching)
+   - Revenue amount: Uses `CandidateColumns.revenue` (flexible matching)
 2. **Department Mapping**:
-   - Build `department_code_to_title` mapping from department code → department title
-   - Trim whitespace from department codes for consistent matching
+   - Build `code_to_title_map` from department code → department title
+   - Trim whitespace from department codes using `DataUtils.trim_dept_code()`
    - Store mapping for use in report generation
 3. **Grouping and Aggregation**:
    - Group by department code column
    - Sum revenue amount per department
 4. **Output**: 
    - Dictionary: `{department_code: sum_of_revenue}` per range
-   - All unique departments collected across all ranges
+   - All unique departments collected in `departments_set` across all ranges
 
 **Formula**:
 ```
@@ -261,148 +275,77 @@ revenue_per_department = GROUP BY department_code, SUM(revenue_amount)
 ```
 
 **Normalization**:
-- All values converted to float (handles Decimal, None, etc.)
-- None/null values converted to 0.0
+- All values converted to float via `DataUtils.normalize_value()`
+- Handles `None`, `NaN`, `Inf` by converting to `0.0`
+
+---
+
+### Budget Processing
+
+**Input**: DataFrame from `Shakudo_DMRBudget` stored procedure
+
+**Processing Steps**:
+1. **Identify Columns**:
+   - Uses `CandidateColumns.budgetType`, `budgetAmount`, `departmentCode`, and `departmentTitle`.
+2. **Visit Budget Mapping**:
+   - If `budget_type` contains "visits":
+     - Look up location name in `VISITS_DEPT_CODE_MAPPING` using `dept_code`.
+     - Store in `processed_visits_budget[range][location_name]`.
+3. **Financial Budget Mapping**:
+   - If `budget_type` contains "payroll" or "revenue":
+     - Map to `processed_financial_budget[range][dept_code]`.
+     - Update `code_to_title_map`.
+4. **Output**:
+   - Two dictionaries: `processed_financial_budget` and `processed_visits_budget`.
 
 ---
 
 ### Payroll Processing
 
-Payroll processing is the most complex, involving multiple data sources and different logic based on the date range type.
+Payroll processing involves multiple data sources depending on whether the range is "Actual" or "Prior Year".
 
 #### Data Sources:
-1. **Payroll Contract** (`Shakudo_DMRGetPayroll`): Hourly employee time punches
-2. **Payroll Salary Active** (`Shakudo_DMRGetPayrollSalary`): Daily rates for salaried employees
-3. **Payroll History** (`Shakudo_DMRGetPayrollHistory`): Historical totals for ranges > 7 days old
+1. **Payroll Contract** (`Shakudo_DMRGetPayroll`): Hourly employee time punches and dollar amounts.
+2. **Payroll Salary** (`Shakudo_DMRGetPayrollSalary`): Totals for salaried employees.
+3. **Payroll History** (`Shakudo_DMRGetPayrollHistory`): Historical totals for Prior Year ranges.
 
-#### Step 1: Calculate Contract Payroll
+#### Step 1: Calculate Contract Payroll (Hourly)
 
 **Input**: DataFrame from `Shakudo_DMRGetPayroll`
 
 **Processing Steps**:
 1. **Identify Columns**:
-   - Department code: Same candidates as revenue
-   - Department title: Same candidates as revenue
-   - Start time: `start_punchtime`, `StartPunchTime`, or `StartTime`
-   - End time: `end_punchtime`, `EndPunchTime`, or `EndTime`
-   - Rate: `rate`, `Rate`, or `HourlyRate`
-2. **Data Type Conversion**:
-   - Convert start/end times to datetime (coerce errors)
-   - Convert rate to numeric (fill NaN with 0)
-3. **Calculate Hours Worked**:
-   ```
-   hours_worked = (end_time - start_time).total_seconds() / 3600.0
-   ```
-4. **Calculate Wages**:
-   ```
-   wages = hours_worked * rate
-   ```
-   - **Note**: Currently uses simple linear calculation (no overtime logic)
-   - Overtime logic (commented out): 
-     - If hours_worked <= 8: `wages = hours_worked * rate`
-     - If hours_worked > 8: `wages = (8 * rate) + ((hours_worked - 8) * rate * 1.5)`
-5. **Aggregation**:
-   - Group by department code
-   - Sum wages per department
-6. **Output**: Dictionary `{department_code: total_calculated_wages}`
+   - Uses `CandidateColumns` for start/end times, rate, hours, and dollar amount.
+2. **Calculate Working Hours**:
+   - If punch times are present: `working_hours = (end_time - start_time) in hours`.
+3. **Calculate Wages per row**:
+   - If `hours` column > 0: `wage = (hours * rate) + dollar_amount`
+   - Else: `wage = (working_hours * rate) + dollar_amount`
+4. **Aggregation**:
+   - Sum wages per department code.
+5. **Output**: Dictionary `calculated_wages = {dept_code: total_wages}`
 
-**Formula**:
+#### Step 2: Combine Components by Range Type
+
+**If is_current_date (Today)**:
+- All payroll values are set to `0.0` for all departments found in revenue.
+
+**For Actual Ranges**:
 ```
-calculated_payroll[dept] = SUM(hours_worked * rate) for all employees in dept
+Total Payroll = calculated_wages (from Contract) + salary_totals (from Salary)
 ```
 
-#### Step 2: Process Salary Payroll Rates
-
-**Input**: DataFrame from `Shakudo_DMRGetPayrollSalary` (fetched once per resort)
-
-**Processing Steps**:
-1. **Identify Columns**:
-   - Department code: `deptcode`, `DeptCode`, `dept_code`, `Department`, or `department`
-   - Rate per day: `rate_per_day`, `RatePerDay`, or `Rate`
-   - Department title: Same candidates as revenue
-2. **Build Rate Dictionary**:
-   - Create `salary_payroll_rates = {dept_code: rate_per_day}`
-   - Update `department_code_to_title` mapping
-3. **Output**: Dictionary `{department_code: rate_per_day}`
-
-#### Step 3: Process History Payroll (if applicable)
-
-**Input**: DataFrame from `Shakudo_DMRGetPayrollHistory`
-
-**Processing Steps**:
-1. **Identify Columns**:
-   - Department: `department`, `Department`, `Dept`, or `dept`
-   - Total: `total`, `Total`, `amount`, or `Amount`
-2. **Build History Dictionary**:
-   - Create `history_payroll = {dept_code: total}`
-3. **Usage**: Only fetched for:
-   - Month to Date (Actual) - if range > 7 days
-   - For Winter Ending (Actual) - if range > 7 days
-   - All Prior Year ranges
-4. **Date Range Adjustment**:
-   - For Month to Date and Winter Ending: History fetched for range excluding recent 7 days
-   - History end date = range end date - 7 days
-
-#### Step 4: Combine Payroll Components by Range Type
-
-The final payroll calculation varies by range type:
-
-##### A. For The Day (Actual)
+**For Prior Year Ranges**:
 ```
-For each department:
-  total_payroll = calculated_payroll[dept] + salary_payroll_rates[dept]
+Total Payroll = history_totals (from History)
 ```
 
-**Logic**: Contract payroll (from time punches) + one day of salary payroll
+**Note**: In Prior Year ranges, Contract and Salary data are ignored in favor of the aggregated History data.
 
-##### B. For The Week Ending (Actual)
-```
-For each department:
-  days_in_range = number of days from Monday to report date
-  salary_total = salary_payroll_rates[dept] * days_in_range
-  total_payroll = calculated_payroll[dept] + salary_total
-```
+#### Step 3: Handle Debug Logging
+- Detailed breakdown of payroll calculations (punches, rates, components) is logged to `DebugLogs.txt` and the console.
 
-**Logic**: Contract payroll + (salary rate × number of days in range)
-
-##### C. Month to Date (Actual) / For Winter Ending (Actual)
-
-**If range <= 7 days**:
-```
-For each department:
-  days_in_range = number of days in range
-  salary_total = salary_payroll_rates[dept] * days_in_range
-  total_payroll = calculated_payroll[dept] + salary_total
-```
-
-**If range > 7 days**:
-```
-For each department:
-  recent_week_salary = salary_payroll_rates[dept] * 7
-  rest_range_salary = history_payroll[dept]  (from history SP for range excluding recent 7 days)
-  total_payroll = calculated_payroll[dept] + recent_week_salary + rest_range_salary
-```
-
-**Logic**: 
-- Recent 7 days: Use current salary rates
-- Older than 7 days: Use historical totals from PayrollHistory SP
-
-##### D. All Prior Year Ranges
-```
-For each department:
-  total_payroll = calculated_payroll[dept] + history_payroll[dept]
-```
-
-**Logic**: Contract payroll (if any) + historical payroll totals
-
-#### Step 5: Handle Current Date Reports
-
-**Special Case**: If report is for current date (today):
-- Payroll Contract SP is skipped
-- Payroll History SP is skipped
-- All payroll values set to 0.0 for all departments found in revenue
-
-**Output**: Dictionary `{department_code: total_payroll}` per range
+**Output**: Dictionary `processed_payroll[range][dept_code]`
 
 ---
 
@@ -417,10 +360,12 @@ The final report is written to an Excel file with the following structure:
   - Format: `"{resort_name} Resort\nDaily Management Report\nAs of {day_name} - {day_date}"`
   - Example: `"PURGATORY Resort\nDaily Management Report\nAs of Wednesday - 19 November, 2025"`
 
-#### Column Headers (Row 1, Columns B-J)
-- Each column represents one of the 9 date ranges
-- Format: `"{range_name}\n{start_date} - {end_date}"`
-- Example: `"For The Day (Actual)\nNov 19 - Nov 19"`
+#### Column Headers (Row 1, Columns B-N)
+- Each column represents one of the 9 date ranges, plus 4 budget comparison columns for the "Actual" ranges.
+- Total Columns: 13 (9 ranges + 4 budgets)
+- Budget columns are inserted immediately after their corresponding "Actual" range.
+- Format: `"{column_name}\n{start_date} - {end_date}"`
+- Example: `"For The Day (Actual) (Budget)\nNov 19 - Nov 19"`
 
 #### Row Structure
 
@@ -437,10 +382,14 @@ The final report is written to an Excel file with the following structure:
 - **Header Row**: "VISITS" (bold, gray background)
 - **Location Rows**: One row per location (sorted alphabetically)
   - Row label: Location name
-  - Values: `processed_visits[range].get(location, 0)` for each range
+  - Values: 
+    - Actual ranges: `processed_visits[range].get(location, 0)`
+    - Budget columns: `processed_budget.get(range_key, {}).get(loc_key, 0)`
   - Format: Number with 2 decimal places
 - **Total Row**: "Total Tickets"
-  - Values: `SUM(processed_visits[range].values())` for each range
+  - Values: 
+    - Actual/Prior ranges: `SUM(processed_visits[range].values())`
+    - Budget columns: `SUM(processed_budget.values())`
   - Format: Number with 2 decimal places
 - **Spacer**: Empty row
 
@@ -449,11 +398,15 @@ The final report is written to an Excel file with the following structure:
 
 **For each department** (sorted by department code):
 1. **Revenue Row**: `"{department_title} - Revenue"`
-   - Values: `processed_revenue[range].get(dept_code, 0)` for each range
+   - Values: 
+     - Actual/Prior ranges: `processed_revenue[range].get(dept_code, 0)`
+     - Budget columns: `processed_budget.get(range_key, {}).get(dept_code, {}).get('Revenue', 0)`
    - Format: Number with 2 decimal places, comma separator
    
 2. **Payroll Row**: `"{department_title} - Payroll"`
-   - Values: `processed_payroll[range].get(dept_code, 0)` for each range
+   - Values: 
+     - Actual/Prior ranges: `processed_payroll[range].get(dept_code, 0)`
+     - Budget columns: `processed_budget.get(range_key, {}).get(dept_code, {}).get('Payroll', 0)`
    - Format: Number with 2 decimal places, comma separator
    
 3. **PR% Row**: `"PR % of {department_title}"`
@@ -587,25 +540,26 @@ If a stored procedure returns no data (empty DataFrame):
    ↓
 2. For Each Range:
    ├─ Execute Revenue SP → Export → Process (group by dept, sum revenue)
-   ├─ Execute Payroll SP → Export → Process (calculate wages, group by dept)
    ├─ Execute Visits SP → Export → Process (group by location, sum visits)
-   └─ Execute Weather SP → Export → Process (sum snow_24hrs, sum base_depth)
+   ├─ Execute Weather SP → Export → Process (sum snow_24hrs, sum base_depth)
+   ├─ If Actual Range:
+   │  ├─ Execute Payroll Contract SP → Export → Process (calculate hourly wages)
+   │  ├─ Execute Payroll Salary SP → Export → Process (salary totals)
+   │  └─ Execute Budget SP → Export → Process (map visits & financial budgets)
+   └─ If Prior Year Range:
+      └─ Execute Payroll History SP → Export → Process (historical totals)
    ↓
-3. Fetch Salary Payroll Rates (once) → Export
+3. Combine Payroll Components (Actual vs Prior Year)
    ↓
-4. Fetch Payroll History (if needed) → Export
+4. Build Department Mapping (code → title)
    ↓
-5. Combine Payroll Components by Range Type
-   ↓
-6. Build Department Mapping (code → title)
-   ↓
-7. Generate Excel Report:
+5. Generate Excel Report:
    ├─ Write Header
    ├─ Write Snow Rows
-   ├─ Write Visits Rows
-   └─ Write Financial Rows (Revenue, Payroll, PR% per department)
+   ├─ Write Visits Rows (including budget columns)
+   └─ Write Financial Rows (Revenue, Payroll, PR% per department + budgets)
    ↓
-8. Save Report File
+6. Save Report File
 ```
 
 ---
@@ -619,17 +573,11 @@ Revenue[dept, range] = SUM(revenue_amount) WHERE department = dept AND date IN r
 
 ### Payroll (varies by range)
 ```
-For The Day (Actual):
-  Payroll[dept] = ContractPayroll[dept] + SalaryRate[dept]
-
-For The Week Ending (Actual):
-  Payroll[dept] = ContractPayroll[dept] + (SalaryRate[dept] × days_in_range)
-
-Month to Date / Winter Ending (Actual) - if range > 7 days:
-  Payroll[dept] = ContractPayroll[dept] + (SalaryRate[dept] × 7) + HistoryPayroll[dept]
+Actual Ranges (Day, Week, Month, Winter):
+  Payroll[dept] = ContractPayroll[dept] + SalaryPayroll[dept]
 
 Prior Year Ranges:
-  Payroll[dept] = ContractPayroll[dept] + HistoryPayroll[dept]
+  Payroll[dept] = HistoryPayroll[dept]
 ```
 
 ### PR% (Profit Ratio Percentage)
