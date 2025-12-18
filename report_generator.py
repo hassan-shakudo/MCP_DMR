@@ -160,22 +160,22 @@ class ReportGenerator:
                 salary_totals = {}
                 
                 if not dataframe_history.empty:
-                    h_code_col = DataUtils.get_col(dataframe_history, CandidateColumns.departmentCode) or 'department'
-                    h_total_col = DataUtils.get_col(dataframe_history, CandidateColumns.historyTotal)
+                    history_code_column = DataUtils.get_col(dataframe_history, CandidateColumns.departmentCode) or 'department'
+                    history_total_column = DataUtils.get_col(dataframe_history, CandidateColumns.historyTotal)
                     for _, row in dataframe_history.iterrows():
-                        dept = DataUtils.trim_dept_code(row[h_code_col])
-                        if dept: history_totals[dept] = DataUtils.normalize_value(row[h_total_col])
+                        dept = DataUtils.trim_dept_code(row[history_code_column])
+                        if dept: history_totals[dept] = DataUtils.normalize_value(row[history_total_column])
                 
                 if not dataframe_salary.empty:
-                    s_code_col = DataUtils.get_col(dataframe_salary, CandidateColumns.departmentCode)
-                    s_total_col = DataUtils.get_col(dataframe_salary, CandidateColumns.salaryTotal)
-                    s_title_col = DataUtils.get_col(dataframe_salary, CandidateColumns.departmentTitle)
+                    salary_code_column = DataUtils.get_col(dataframe_salary, CandidateColumns.departmentCode)
+                    salary_total_column = DataUtils.get_col(dataframe_salary, CandidateColumns.salaryTotal)
+                    salary_title_column = DataUtils.get_col(dataframe_salary, CandidateColumns.departmentTitle)
                     for _, row in dataframe_salary.iterrows():
-                        dept = DataUtils.trim_dept_code(row[s_code_col])
+                        dept = DataUtils.trim_dept_code(row[salary_code_column])
                         if dept: 
-                            salary_totals[dept] = DataUtils.normalize_value(row[s_total_col])
-                            if s_title_col and pd.notna(row[s_title_col]) and dept not in department_to_title:
-                                department_to_title[dept] = str(row[s_title_col]).strip()
+                            salary_totals[dept] = DataUtils.normalize_value(row[salary_total_column])
+                            if salary_title_column and pd.notna(row[salary_title_column]) and dept not in department_to_title:
+                                department_to_title[dept] = str(row[salary_title_column]).strip()
 
                 # 3. Combine Components and Build Log
                 relevant_depts = set(calculated_wages.keys()) | set(salary_totals.keys()) | set(history_totals.keys())
@@ -189,20 +189,20 @@ class ReportGenerator:
                     for idx, r in enumerate(rows, 1):
                         log_message += f"          Row {idx}: Start={r['start']}, End={r['end']}, WHrs={r['w_hrs']:.2f}, HCol={r['h_col']:.2f}, Rate=${r['rate']:.2f}, Dlr=${r['d_amt']:.2f}, Wage=${r['wage']:.2f}\n"
                     
-                    c_total = calculated_wages.get(dept_code, 0.0)
-                    s_total = salary_totals.get(dept_code, 0.0)
-                    h_total = history_totals.get(dept_code, 0.0)
+                    contract_total = calculated_wages.get(dept_code, 0.0)
+                    salary_total = salary_totals.get(dept_code, 0.0)
+                    history_total = history_totals.get(dept_code, 0.0)
                     
                     if range_name in actual_ranges:
-                        final_wage = c_total + s_total
-                        log_message += f"        • Aggregated Contract: ${c_total:,.2f}\n"
-                        log_message += f"        • Salary for Range: ${s_total:,.2f}\n"
+                        final_wage = contract_total + salary_total
+                        log_message += f"        • Aggregated Contract: ${contract_total:,.2f}\n"
+                        log_message += f"        • Salary for Range: ${salary_total:,.2f}\n"
                         log_message += f"        • History: (Not used for Actual)\n"
                     else:
-                        final_wage = h_total
+                        final_wage = history_total
                         log_message += f"        • Contract: (Not used for Prior Year)\n"
                         log_message += f"        • Salary: (Not used for Prior Year)\n"
-                        log_message += f"        • Historical Total: ${h_total:,.2f}\n"
+                        log_message += f"        • Historical Total: ${history_total:,.2f}\n"
                     
                     processed_payroll[range_name][dept_code] = final_wage
                     log_message += f"     ✅ FINAL PAYROLL TOTAL: ${final_wage:,.2f}\n"
@@ -263,26 +263,26 @@ class ReportGenerator:
 
     # --- Excel Writing ---
 
-    def _write_snow_section(self, worksheet, row, columns, processed_snow, fmt_snow, fmt_row_header):
-        worksheet.write(row, 0, "Snow 24hrs", fmt_row_header)
+    def _write_snow_section(self, worksheet, row, columns, processed_snow, snow_format, row_header_format):
+        worksheet.write(row, 0, "Snow 24hrs", row_header_format)
         for i, col_name in enumerate(columns):
             if not col_name.endswith(" (Budget)"):
                 value = DataUtils.normalize_value(processed_snow[col_name]['snow_24hrs'])
-                worksheet.write(row, i + 1, value, fmt_snow)
+                worksheet.write(row, i + 1, value, snow_format)
         row += 1
-        worksheet.write(row, 0, "Base Depth", fmt_row_header)
+        worksheet.write(row, 0, "Base Depth", row_header_format)
         for i, col_name in enumerate(columns):
             if not col_name.endswith(" (Budget)"):
                 value = DataUtils.normalize_value(processed_snow[col_name]['base_depth'])
-                worksheet.write(row, i + 1, value, fmt_snow)
+                worksheet.write(row, i + 1, value, snow_format)
         return row + 2
 
     def _write_visits_section(self, worksheet, row, columns, processed_visits, processed_budget, 
-                              all_locations, resort_name, fmt_row_header, fmt_data, fmt_header):
-        worksheet.write(row, 0, "VISITS", fmt_header)
+                              all_locations, resort_name, row_header_format, data_format, header_format):
+        worksheet.write(row, 0, "VISITS", header_format)
         row += 1
         for location in sorted(list(all_locations)):
-            worksheet.write(row, 0, location, fmt_row_header)
+            worksheet.write(row, 0, location, row_header_format)
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
@@ -290,85 +290,92 @@ class ReportGenerator:
                     value = processed_budget.get(range_key, {}).get(loc_key, 0)
                 else:
                     value = processed_visits[col_name].get(location, 0)
-                worksheet.write(row, i + 1, DataUtils.normalize_value(value), fmt_data)
+                worksheet.write(row, i + 1, DataUtils.normalize_value(value), data_format)
             row += 1
         
-        worksheet.write(row, 0, "Total Tickets", fmt_header)
+        worksheet.write(row, 0, "Total Tickets", header_format)
         for i, col_name in enumerate(columns):
             if col_name.endswith(" (Budget)"):
                 range_key = self._get_budget_range_name(col_name)
                 total_val = sum(processed_budget.get(range_key, {}).values())
             else:
                 total_val = sum(processed_visits[col_name].values())
-            worksheet.write(row, i + 1, DataUtils.normalize_value(total_val), fmt_data)
+            worksheet.write(row, i + 1, DataUtils.normalize_value(total_val), data_format)
         return row + 2
 
     def _write_financials_section(self, worksheet, row, columns, processed_revenue, processed_payroll, 
                                   processed_budget, sorted_depts, dept_to_title, 
-                                  fmt_row_header, fmt_data, fmt_header, fmt_percent):
-        worksheet.write(row, 0, "FINANCIALS", fmt_header)
+                                  row_header_format, data_format, header_format, percent_format):
+        worksheet.write(row, 0, "FINANCIALS", header_format)
         row += 1
         for dept_code in sorted_depts:
             trimmed_code = DataUtils.trim_dept_code(dept_code)
             title = dept_to_title.get(trimmed_code, trimmed_code)
             
             # Revenue Row
-            worksheet.write(row, 0, f"{title} - Revenue", fmt_row_header)
+            worksheet.write(row, 0, f"{title} - Revenue", row_header_format)
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
                     val = processed_budget.get(range_key, {}).get(trimmed_code, {}).get('Revenue', 0)
                 else:
                     val = processed_revenue[col_name].get(trimmed_code, 0)
-                worksheet.write(row, i + 1, DataUtils.normalize_value(val), fmt_data)
+                worksheet.write(row, i + 1, DataUtils.normalize_value(val), data_format)
             row += 1
             
             # Payroll Row
-            worksheet.write(row, 0, f"{title} - Payroll", fmt_row_header)
+            worksheet.write(row, 0, f"{title} - Payroll", row_header_format)
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
                     val = processed_budget.get(range_key, {}).get(trimmed_code, {}).get('Payroll', 0)
                 else:
                     val = processed_payroll[col_name].get(trimmed_code, 0)
-                worksheet.write(row, i + 1, DataUtils.normalize_value(val), fmt_data)
+                worksheet.write(row, i + 1, DataUtils.normalize_value(val), data_format)
             row += 1
             
             # PR% Row
-            worksheet.write(row, 0, f"PR % of {title}", fmt_row_header)
+            row_header_format_text = f"PR % of {title}"
+            worksheet.write(row, 0, row_header_format_text, row_header_format)
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
-                    b_data = processed_budget.get(range_key, {}).get(trimmed_code, {})
-                    rev, pay = abs(DataUtils.normalize_value(b_data.get('Revenue', 0))), abs(DataUtils.normalize_value(b_data.get('Payroll', 0)))
+                    budget_data = processed_budget.get(range_key, {}).get(trimmed_code, {})
+                    revenue = abs(DataUtils.normalize_value(budget_data.get('Revenue', 0)))
+                    payroll = abs(DataUtils.normalize_value(budget_data.get('Payroll', 0)))
                 else:
-                    rev, pay = abs(DataUtils.normalize_value(processed_revenue[col_name].get(trimmed_code, 0))), abs(DataUtils.normalize_value(processed_payroll[col_name].get(trimmed_code, 0)))
+                    revenue = abs(DataUtils.normalize_value(processed_revenue[col_name].get(trimmed_code, 0)))
+                    payroll = abs(DataUtils.normalize_value(processed_payroll[col_name].get(trimmed_code, 0)))
                 
-                pct = (rev / pay * 100) if rev != 0 and pay != 0 else 0
-                worksheet.write(row, i + 1, pct, fmt_percent)
+                percentage = (payroll / revenue * 100) if revenue != 0 else 0
+                worksheet.write(row, i + 1, percentage, percent_format)
             row += 1
         return row + 1
 
     def _write_totals_section(self, worksheet, row, columns, processed_revenue, processed_payroll, 
-                              processed_budget, sorted_depts, fmt_data, fmt_header, fmt_percent):
+                              processed_budget, sorted_depts, data_format, header_format, percent_format):
         labels = ["Total Revenue", "Total Payroll", "PR % of Total Revenue", "Net Total Revenue"]
         for label in labels:
-            worksheet.write(row, 0, label, fmt_header)
+            worksheet.write(row, 0, label, header_format)
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
-                    rev_total = sum(DataUtils.normalize_value(processed_budget.get(range_key, {}).get(DataUtils.trim_dept_code(d), {}).get('Revenue', 0)) for d in sorted_depts)
-                    pay_total = sum(DataUtils.normalize_value(processed_budget.get(range_key, {}).get(DataUtils.trim_dept_code(d), {}).get('Payroll', 0)) for d in sorted_depts)
+                    revenue_total = sum(DataUtils.normalize_value(processed_budget.get(range_key, {}).get(DataUtils.trim_dept_code(d), {}).get('Revenue', 0)) for d in sorted_depts)
+                    payroll_total = sum(DataUtils.normalize_value(processed_budget.get(range_key, {}).get(DataUtils.trim_dept_code(d), {}).get('Payroll', 0)) for d in sorted_depts)
                 else:
-                    rev_total = sum(processed_revenue[col_name].values())
-                    pay_total = sum(processed_payroll[col_name].values())
+                    revenue_total = sum(processed_revenue[col_name].values())
+                    payroll_total = sum(processed_payroll[col_name].values())
                 
-                if label == "Total Revenue": val = rev_total
-                elif label == "Total Payroll": val = pay_total
-                elif label == "PR % of Total Revenue": val = (abs(rev_total) / abs(pay_total) * 100) if rev_total != 0 and pay_total != 0 else 0
-                else: val = rev_total - pay_total
+                if label == "Total Revenue": 
+                    final_value = revenue_total
+                elif label == "Total Payroll": 
+                    final_value = payroll_total
+                elif label == "PR % of Total Revenue": 
+                    final_value = (abs(payroll_total) / abs(revenue_total) * 100) if revenue_total != 0 else 0
+                else: 
+                    final_value = revenue_total - payroll_total
                 
-                worksheet.write(row, i + 1, val, fmt_percent if "PR %" in label else fmt_data)
+                worksheet.write(row, i + 1, final_value, percent_format if "PR %" in label else data_format)
             row += 1
 
     # --- Main Generator ---
@@ -409,25 +416,25 @@ class ReportGenerator:
         actual_range_names = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
         
         with DatabaseConnection() as conn:
-            sp_handler = StoredProcedures(conn)
+            stored_procedures_handler = StoredProcedures(conn)
             for name in range_names_ordered:
                 start, end = ranges[name]
                 print(f"   ⏳ Fetching {name} ({start.date()} to {end.date()})...")
                 
-                data_store[name]['revenue'] = sp_handler.execute_revenue(db_name, group_num, start, end)
-                data_store[name]['visits'] = sp_handler.execute_visits(resort_name, start, end)
-                data_store[name]['snow'] = sp_handler.execute_weather(resort_name, start, end)
+                data_store[name]['revenue'] = stored_procedures_handler.execute_revenue(db_name, group_num, start, end)
+                data_store[name]['visits'] = stored_procedures_handler.execute_visits(resort_name, start, end)
+                data_store[name]['snow'] = stored_procedures_handler.execute_weather(resort_name, start, end)
                 
                 if not is_current:
                     if name in actual_range_names:
-                        data_store[name]['payroll'] = sp_handler.execute_payroll(resort_name, start, end)
-                        data_store[name]['salary_payroll'] = sp_handler.execute_payroll_salary(resort_name, start, end)
+                        data_store[name]['payroll'] = stored_procedures_handler.execute_payroll(resort_name, start, end)
+                        data_store[name]['salary_payroll'] = stored_procedures_handler.execute_payroll_salary(resort_name, start, end)
                         
                         # Special handling for weekly budget range
                         budget_start, budget_end = (date_calculator.week_total_actual() if name == "For The Week Ending (Actual)" else (start, end))
-                        data_store[name]['budget'] = sp_handler.execute_budget(resort_name, budget_start, budget_end)
+                        data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
                     else:
-                        data_store[name]['payroll_history'] = sp_handler.execute_payroll_history(resort_name, start, end)
+                        data_store[name]['payroll_history'] = stored_procedures_handler.execute_payroll_history(resort_name, start, end)
 
                 # Ensure all required keys exist and export debug files
                 for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'payroll_history']:
@@ -448,20 +455,20 @@ class ReportGenerator:
 
         # 5. Write Final Excel Report
         file_path = os.path.join(self.output_dir, f"{DataUtils.sanitize_filename(resort_name)}_Report_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
-        workbook = xlsxwriter.Workbook(file_path)
+        workbook = xlsxwriter.Workbook(file_path, {'nan_inf_to_errors': True})
         worksheet = workbook.add_worksheet("Report")
         
         # Formats
-        f_header = workbook.add_format({'bold':True,'align':'center','bg_color':'#D3D3D3','border':1,'text_wrap':True})
-        f_row_head = workbook.add_format({'bold':True,'border':1})
-        f_data = workbook.add_format({'border':1, 'num_format':'#,##0.00'})
-        f_snow = workbook.add_format({'border':1, 'num_format':'0.0'})
-        f_percent = workbook.add_format({'border':1, 'num_format':'0"%"'})
+        header_format = workbook.add_format({'bold':True,'align':'center','bg_color':'#D3D3D3','border':1,'text_wrap':True})
+        row_header_format = workbook.add_format({'bold':True,'border':1})
+        data_format = workbook.add_format({'border':1, 'num_format':'#,##0.00'})
+        snow_format = workbook.add_format({'border':1, 'num_format':'0.0'})
+        percent_format = workbook.add_format({'border':1, 'num_format':'0"%"'})
         
         # Write Title and Column Headers
         day_actual_start = ranges["For The Day (Actual)"][0]
         title_text = f"{resort_name} Resort\nDaily Management Report\nAs of {day_actual_start.strftime('%A')} - {day_actual_start.strftime('%d %B, %Y').lstrip('0')}"
-        worksheet.write(0, 0, title_text, f_header)
+        worksheet.write(0, 0, title_text, header_format)
         
         column_structure = []
         for name in range_names_ordered:
@@ -474,31 +481,31 @@ class ReportGenerator:
                 start, end = (date_calculator.week_total_actual() if col_name == "Week Total (Actual) (Budget)" else ranges[self._get_budget_range_name(col_name)])
             else:
                 start, end = ranges[col_name]
-            worksheet.write(0, i + 1, f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}", f_header)
+            worksheet.write(0, i + 1, f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}", header_format)
             worksheet.set_column(i + 1, i + 1, 18)
         
         worksheet.set_column(0, 0, 30)
         worksheet.freeze_panes(1, 1)
         
         # Write Data Sections
-        current_row = self._write_snow_section(worksheet, 1, column_structure, processed_snow, f_snow, f_row_head)
-        current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, resort_name, f_row_head, f_data, f_header)
-        current_row = self._write_financials_section(worksheet, current_row, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), code_to_title_map, f_row_head, f_data, f_header, f_percent)
-        self._write_totals_section(worksheet, current_row + 1, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), f_data, f_header, f_percent)
+        current_row = self._write_snow_section(worksheet, 1, column_structure, processed_snow, snow_format, row_header_format)
+        current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, resort_name, row_header_format, data_format, header_format)
+        current_row = self._write_financials_section(worksheet, current_row, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), code_to_title_map, row_header_format, data_format, header_format, percent_format)
+        self._write_totals_section(worksheet, current_row + 1, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), data_format, header_format, percent_format)
         
         workbook.close()
         if debug_log_handle: debug_log_handle.close()
         print(f"✓ Report saved: {file_path}")
         return file_path
 
-    def _export_sp_result(self, dataframe: pd.DataFrame, range_name: str, sp_name: str, resort_name: str, export_directory: str = None) -> str:
+    def _export_sp_result(self, dataframe: pd.DataFrame, range_name: str, stored_procedure_name: str, resort_name: str, export_directory: str = None) -> str:
         sanitized_range = DataUtils.sanitize_filename(range_name)
-        sanitized_sp = DataUtils.sanitize_filename(sp_name)
+        sanitized_sp = DataUtils.sanitize_filename(stored_procedure_name)
         file_path = os.path.join(export_directory or self.output_dir, f"{sanitized_range}_{sanitized_sp}.xlsx")
         
         # Sort logic
         dataframe_to_write = dataframe
-        if sp_name in ['Revenue', 'Payroll']:
+        if stored_procedure_name in ['Revenue', 'Payroll']:
             dept_column = DataUtils.get_col(dataframe, CandidateColumns.departmentCode + CandidateColumns.departmentTitle)
             if dept_column:
                 dataframe_to_write = dataframe.copy()
@@ -506,18 +513,18 @@ class ReportGenerator:
                 dataframe_to_write = dataframe_to_write.sort_values(by='_sort_key', na_position='last').drop(columns=['_sort_key'])
         
         # Write dataset
-        wb = xlsxwriter.Workbook(file_path)
-        ws = wb.add_worksheet('Data')
-        f_header, f_data = wb.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1}), wb.add_format({'border': 1})
+        workbook = xlsxwriter.Workbook(file_path, {'nan_inf_to_errors': True})
+        worksheet = workbook.add_worksheet('Data')
+        header_format, data_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1}), workbook.add_format({'border': 1})
         
         for col_index, column_name in enumerate(dataframe_to_write.columns):
-            ws.write(0, col_index, column_name, f_header)
+            worksheet.write(0, col_index, column_name, header_format)
             max_column_width = len(str(column_name))
             for row_index, (_, row_data) in enumerate(dataframe_to_write.iterrows(), start=1):
                 cell_value = row_data[column_name]
-                ws.write(row_index, col_index, None if pd.isna(cell_value) else cell_value, f_data)
+                worksheet.write(row_index, col_index, None if pd.isna(cell_value) else cell_value, data_format)
                 max_column_width = max(max_column_width, len(str(cell_value)))
-            ws.set_column(col_index, col_index, min(max_column_width + 2, 50))
+            worksheet.set_column(col_index, col_index, min(max_column_width + 2, 50))
         
-        wb.close()
+        workbook.close()
         return file_path
