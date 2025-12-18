@@ -3,6 +3,7 @@ Data processing utilities for MCP Database
 Mountain Capital Partners - Ski Resort Data Analysis
 """
 
+import math
 import pandas as pd
 import pyodbc
 from typing import Tuple, Dict, Any, Union, List
@@ -33,11 +34,14 @@ class DataUtils:
     
     @staticmethod
     def normalize_value(value: Any) -> float:
-        """Safely convert numeric values (handles Decimal, None, etc.)"""
+        """Safely convert numeric values (handles Decimal, None, NaN, Inf, etc.)"""
         if value is None:
             return 0.0
         try:
-            return float(value)
+            val = float(value)
+            if math.isnan(val) or math.isinf(val):
+                return 0.0
+            return val
         except (TypeError, ValueError):
             return 0.0
 
