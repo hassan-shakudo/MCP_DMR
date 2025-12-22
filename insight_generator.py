@@ -24,14 +24,13 @@ class InsightGenerator:
         Initialize the insight generator
         
         Args:
-            output_dir: Base output directory (insights folder will be created at same level)
+            output_dir: Base output directory (not used, kept for compatibility)
         """
         self.output_dir = output_dir
-        # Create insights directory at same level as reports folder
-        # If output_dir is "reports", insights will be at the same level
-        output_path = os.path.abspath(output_dir)
-        parent_dir = os.path.dirname(output_path)
-        self.insights_dir = os.path.join(parent_dir, "insights")
+        # Create insights directory at root level (where main.ipynb/main.py is located)
+        # Get the directory of the current file and use that as root
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        self.insights_dir = os.path.join(current_file_dir, "insights")
         if not os.path.exists(self.insights_dir):
             os.makedirs(self.insights_dir)
             print(f"✓ Created insights directory: {self.insights_dir}")
@@ -719,6 +718,8 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
             - Budget Variance %
             - Revenue-to-Payroll % (Comparison)
             - Budget-to-Payroll % (Comparison)
+            - Revenue-to-Payroll Variance %
+            - Budget-to-Payroll Variance %
         """
         # Collect all department codes
         all_depts = set(comparison_revenue.keys()) | set(comparison_payroll.keys()) | \
@@ -732,7 +733,8 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
                 'Comparison Revenue', 'Comparison Payroll', 'Comparison Budget',
                 'Anchor Revenue', 'Anchor Payroll', 'Anchor Budget',
                 'Revenue Variance %', 'Payroll Variance %', 'Budget Variance %',
-                'Revenue-to-Payroll %', 'Budget-to-Payroll %'
+                'Revenue-to-Payroll %', 'Budget-to-Payroll %',
+                'Revenue-to-Payroll Variance %', 'Budget-to-Payroll Variance %'
             ])
         
         rows = []
@@ -753,22 +755,43 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
             pay_variance = self._calculate_variance_percentage(comp_pay, anchor_pay)
             bud_variance = self._calculate_variance_percentage(comp_bud, anchor_bud)
             
-            # Calculate ratios for comparison date (normalize inputs first)
-            comp_rev = DataUtils.normalize_value(comp_rev)
-            comp_pay = DataUtils.normalize_value(comp_pay)
-            comp_bud = DataUtils.normalize_value(comp_bud)
-            
-            # Handle division by zero (including very small values)
+            # Calculate Revenue-to-Payroll ratios for both dates
             if abs(comp_pay) < 1e-10:
-                rev_to_pay_ratio = 0.0
-                bud_to_pay_ratio = 0.0
+                rev_to_pay_ratio_comp = 0.0
             else:
                 try:
-                    rev_to_pay_ratio = DataUtils.normalize_value((comp_rev / comp_pay) * 100)
-                    bud_to_pay_ratio = DataUtils.normalize_value((comp_bud / comp_pay) * 100)
+                    rev_to_pay_ratio_comp = DataUtils.normalize_value((comp_rev / comp_pay) * 100)
                 except (ZeroDivisionError, OverflowError, ValueError):
-                    rev_to_pay_ratio = 0.0
-                    bud_to_pay_ratio = 0.0
+                    rev_to_pay_ratio_comp = 0.0
+            
+            if abs(anchor_pay) < 1e-10:
+                rev_to_pay_ratio_anchor = 0.0
+            else:
+                try:
+                    rev_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_rev / anchor_pay) * 100)
+                except (ZeroDivisionError, OverflowError, ValueError):
+                    rev_to_pay_ratio_anchor = 0.0
+            
+            # Calculate Budget-to-Payroll ratios for both dates
+            if abs(comp_pay) < 1e-10:
+                bud_to_pay_ratio_comp = 0.0
+            else:
+                try:
+                    bud_to_pay_ratio_comp = DataUtils.normalize_value((comp_bud / comp_pay) * 100)
+                except (ZeroDivisionError, OverflowError, ValueError):
+                    bud_to_pay_ratio_comp = 0.0
+            
+            if abs(anchor_pay) < 1e-10:
+                bud_to_pay_ratio_anchor = 0.0
+            else:
+                try:
+                    bud_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_bud / anchor_pay) * 100)
+                except (ZeroDivisionError, OverflowError, ValueError):
+                    bud_to_pay_ratio_anchor = 0.0
+            
+            # Calculate variance of ratios (how the ratio changed between dates)
+            rev_to_pay_variance = self._calculate_variance_percentage(rev_to_pay_ratio_comp, rev_to_pay_ratio_anchor)
+            bud_to_pay_variance = self._calculate_variance_percentage(bud_to_pay_ratio_comp, bud_to_pay_ratio_anchor)
             
             rows.append({
                 'Department Code': dept_code,
@@ -782,8 +805,10 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
                 'Revenue Variance %': rev_variance,
                 'Payroll Variance %': pay_variance,
                 'Budget Variance %': bud_variance,
-                'Revenue-to-Payroll %': rev_to_pay_ratio,
-                'Budget-to-Payroll %': bud_to_pay_ratio
+                'Revenue-to-Payroll %': rev_to_pay_ratio_comp,
+                'Budget-to-Payroll %': bud_to_pay_ratio_comp,
+                'Revenue-to-Payroll Variance %': rev_to_pay_variance,
+                'Budget-to-Payroll Variance %': bud_to_pay_variance
             })
         
         return pd.DataFrame(rows)
