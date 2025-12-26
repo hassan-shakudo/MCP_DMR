@@ -90,6 +90,35 @@ class DataUtils:
             name = name.replace(char, '_')
         return name.strip('. ')
 
+    @staticmethod
+    def calculate_variance_percentage(baseline: float, actual: float) -> float:
+        """
+        Calculate variance percentage between baseline and actual values.
+        
+        Formula: ((baseline - actual) / baseline) * 100
+        
+        Returns:
+            Negative value = actual exceeds baseline (overspent/over)
+            Positive value = actual below baseline (underspent/under)
+            Returns 0.0 for edge cases (zero denominator, overflow, NaN, Inf)
+        """
+        baseline = DataUtils.normalize_value(baseline)
+        actual = DataUtils.normalize_value(actual)
+        
+        if abs(baseline) < 1e-10:
+            return 0.0
+        
+        try:
+            result = ((baseline - actual) / baseline) * 100
+            normalized_result = DataUtils.normalize_value(result)
+            
+            if abs(normalized_result) > 1e6:
+                return 0.0
+            
+            return normalized_result
+        except (ZeroDivisionError, OverflowError, ValueError, TypeError):
+            return 0.0
+
 
 class DateRangeCalculator:
     """Calculate report date ranges based on a reference date"""

@@ -19,7 +19,7 @@ from .stored_procedures import (
     execute_weather_proc
 )
 
-from .report_generator import ReportGenerator
+from .analysis_engine import AnalysisEngine
 
 __all__ = [
     # Config
@@ -39,7 +39,7 @@ __all__ = [
     'execute_visits_proc',
     'execute_weather_proc',
     
-    # Report Generator
-    'ReportGenerator',
+    # Analytics
+    'AnalysisEngine',
 ]
 
