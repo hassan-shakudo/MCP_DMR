@@ -974,169 +974,65 @@ class AnalysisEngine:
         except (ZeroDivisionError, OverflowError, ValueError):
             return 0.0
 
-    def _generate_comparison_insights(self, comparison_revenue: Dict[str, float],
-                                          comparison_payroll: Dict[str, float],
-                                          comparison_budget: Dict[str, Dict[str, float]],
-                                          comparison_visits: Dict[str, float],
-                                          anchor_revenue: Dict[str, float],
-                                          anchor_payroll: Dict[str, float],
-                                          anchor_budget: Dict[str, Dict[str, float]],
-                                          anchor_visits: Dict[str, float],
-                                          department_to_title: Dict[str, str]) -> pd.DataFrame:
+    def _generate_visit_insights(self, comparison_visits: Dict[str, float],
+                                 anchor_visits: Dict[str, float]) -> pd.DataFrame:
         rows = []
-        
-        rows.append({
-            'Row Header': 'Visits',
-            'Dept Code': '',
-            'Value': '',
-            'Anchor Value': '',
-            'Budget': '',
-            'Value-Budget Variance %': '',
-            'Value-Anchor Variance %': '',
-            'Revenue-to-Payroll %': '',
-            'Budget-to-Payroll %': '',
-            'Revenue-to-Payroll Variance %': '',
-            'Budget-to-Payroll Variance %': ''
-        })
         
         all_visit_categories = set(comparison_visits.keys()) | set(anchor_visits.keys())
         for category in sorted(all_visit_categories):
             comp_val = DataUtils.normalize_value(comparison_visits.get(category, 0.0))
             anchor_val = DataUtils.normalize_value(anchor_visits.get(category, 0.0))
-            budget_val = 0.0
             visit_variance = self._calculate_comparison_variance_percentage(comp_val, anchor_val)
-            budget_variance = 0.0
             
             rows.append({
-                'Row Header': category,
-                'Dept Code': '',
-                'Value': comp_val,
-                'Anchor Value': anchor_val,
-                'Budget': budget_val,
-                'Value-Budget Variance %': budget_variance,
-                'Value-Anchor Variance %': visit_variance,
-                'Revenue-to-Payroll %': '',
-                'Budget-to-Payroll %': '',
-                'Revenue-to-Payroll Variance %': '',
-                'Budget-to-Payroll Variance %': ''
+                'Visit Category': category,
+                'Comparison Visits': comp_val,
+                'Anchor Visits': anchor_val,
+                'Visit Variance %': visit_variance
             })
         
-        rows.append({
-            'Row Header': 'Payroll',
-            'Dept Code': '',
-            'Value': '',
-            'Anchor Value': '',
-            'Budget': '',
-            'Value-Budget Variance %': '',
-            'Value-Anchor Variance %': '',
-            'Revenue-to-Payroll %': '',
-            'Budget-to-Payroll %': '',
-            'Revenue-to-Payroll Variance %': '',
-            'Budget-to-Payroll Variance %': ''
-        })
+        return pd.DataFrame(rows)
+    
+    def _generate_financial_insights(self, comparison_revenue: Dict[str, float],
+                                     comparison_payroll: Dict[str, float],
+                                     comparison_budget: Dict[str, Dict[str, float]],
+                                     anchor_revenue: Dict[str, float],
+                                     anchor_payroll: Dict[str, float],
+                                     anchor_budget: Dict[str, Dict[str, float]],
+                                     department_to_title: Dict[str, str]) -> pd.DataFrame:
+        rows = []
         
-        all_depts = set(comparison_payroll.keys()) | set(anchor_payroll.keys())
+        all_depts = set(comparison_payroll.keys()) | set(anchor_payroll.keys()) | set(comparison_revenue.keys()) | set(anchor_revenue.keys())
+        
         for dept_code in sorted(all_depts):
             dept_title = department_to_title.get(dept_code, dept_code)
-            comp_val = DataUtils.normalize_value(comparison_payroll.get(dept_code, 0.0))
-            anchor_val = DataUtils.normalize_value(anchor_payroll.get(dept_code, 0.0))
-            budget_val = DataUtils.normalize_value(comparison_budget.get(dept_code, {}).get('Payroll', 0.0))
-            
-            pay_variance = self._calculate_comparison_variance_percentage(comp_val, anchor_val)
-            
-            if abs(budget_val) < 1e-10:
-                budget_variance = 0.0
-            else:
-                budget_variance = self._calculate_comparison_variance_percentage(comp_val, budget_val)
             
             comp_rev = DataUtils.normalize_value(comparison_revenue.get(dept_code, 0.0))
-            if abs(comp_val) < 1e-10:
-                rev_to_pay_ratio_comp = 0.0
-            else:
-                try:
-                    rev_to_pay_ratio_comp = DataUtils.normalize_value((comp_rev / comp_val) * 100)
-                except (ZeroDivisionError, OverflowError, ValueError):
-                    rev_to_pay_ratio_comp = 0.0
-            
             anchor_rev = DataUtils.normalize_value(anchor_revenue.get(dept_code, 0.0))
-            if abs(anchor_val) < 1e-10:
-                rev_to_pay_ratio_anchor = 0.0
-            else:
-                try:
-                    rev_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_rev / anchor_val) * 100)
-                except (ZeroDivisionError, OverflowError, ValueError):
-                    rev_to_pay_ratio_anchor = 0.0
-            
-            if abs(comp_val) < 1e-10:
-                bud_to_pay_ratio_comp = 0.0
-            else:
-                try:
-                    bud_to_pay_ratio_comp = DataUtils.normalize_value((budget_val / comp_val) * 100)
-                except (ZeroDivisionError, OverflowError, ValueError):
-                    bud_to_pay_ratio_comp = 0.0
-            
-            anchor_bud = DataUtils.normalize_value(anchor_budget.get(dept_code, {}).get('Payroll', 0.0))
-            if abs(anchor_val) < 1e-10:
-                bud_to_pay_ratio_anchor = 0.0
-            else:
-                try:
-                    bud_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_bud / anchor_val) * 100)
-                except (ZeroDivisionError, OverflowError, ValueError):
-                    bud_to_pay_ratio_anchor = 0.0
-            
-            rev_to_pay_variance = self._calculate_comparison_variance_percentage(rev_to_pay_ratio_comp, rev_to_pay_ratio_anchor)
-            bud_to_pay_variance = self._calculate_comparison_variance_percentage(bud_to_pay_ratio_comp, bud_to_pay_ratio_anchor)
-            
-            rows.append({
-                'Row Header': dept_title,
-                'Dept Code': dept_code,
-                'Value': comp_val,
-                'Anchor Value': anchor_val,
-                'Budget': budget_val,
-                'Value-Budget Variance %': budget_variance,
-                'Value-Anchor Variance %': pay_variance,
-                'Revenue-to-Payroll %': rev_to_pay_ratio_comp,
-                'Budget-to-Payroll %': bud_to_pay_ratio_comp,
-                'Revenue-to-Payroll Variance %': rev_to_pay_variance,
-                'Budget-to-Payroll Variance %': bud_to_pay_variance
-            })
-        
-        rows.append({
-            'Row Header': 'Revenue',
-            'Dept Code': '',
-            'Value': '',
-            'Anchor Value': '',
-            'Budget': '',
-            'Value-Budget Variance %': '',
-            'Value-Anchor Variance %': '',
-            'Revenue-to-Payroll %': '',
-            'Budget-to-Payroll %': '',
-            'Revenue-to-Payroll Variance %': '',
-            'Budget-to-Payroll Variance %': ''
-        })
-        
-        all_rev_depts = set(comparison_revenue.keys()) | set(anchor_revenue.keys())
-        for dept_code in sorted(all_rev_depts):
-            dept_title = department_to_title.get(dept_code, dept_code)
-            comp_val = DataUtils.normalize_value(comparison_revenue.get(dept_code, 0.0))
-            anchor_val = DataUtils.normalize_value(anchor_revenue.get(dept_code, 0.0))
-            budget_val = DataUtils.normalize_value(comparison_budget.get(dept_code, {}).get('Revenue', 0.0))
-            
-            rev_variance = self._calculate_comparison_variance_percentage(comp_val, anchor_val)
-            
-            if abs(budget_val) < 1e-10:
-                budget_variance = 0.0
-            else:
-                budget_variance = self._calculate_comparison_variance_percentage(comp_val, budget_val)
-            
             comp_pay = DataUtils.normalize_value(comparison_payroll.get(dept_code, 0.0))
             anchor_pay = DataUtils.normalize_value(anchor_payroll.get(dept_code, 0.0))
             
+            rev_budget = DataUtils.normalize_value(comparison_budget.get(dept_code, {}).get('Revenue', 0.0))
+            pay_budget = DataUtils.normalize_value(comparison_budget.get(dept_code, {}).get('Payroll', 0.0))
+            
+            rev_variance = self._calculate_comparison_variance_percentage(comp_rev, anchor_rev)
+            pay_variance = self._calculate_comparison_variance_percentage(comp_pay, anchor_pay)
+            
+            if abs(rev_budget) < 1e-10:
+                rev_budget_variance = 0.0
+            else:
+                rev_budget_variance = self._calculate_comparison_variance_percentage(comp_rev, rev_budget)
+            
+            if abs(pay_budget) < 1e-10:
+                pay_budget_variance = 0.0
+            else:
+                pay_budget_variance = self._calculate_comparison_variance_percentage(comp_pay, pay_budget)
+            
             if abs(comp_pay) < 1e-10:
                 rev_to_pay_ratio_comp = 0.0
             else:
                 try:
-                    rev_to_pay_ratio_comp = DataUtils.normalize_value((comp_val / comp_pay) * 100)
+                    rev_to_pay_ratio_comp = DataUtils.normalize_value((comp_rev / comp_pay) * 100)
                 except (ZeroDivisionError, OverflowError, ValueError):
                     rev_to_pay_ratio_comp = 0.0
             
@@ -1144,7 +1040,7 @@ class AnalysisEngine:
                 rev_to_pay_ratio_anchor = 0.0
             else:
                 try:
-                    rev_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_val / anchor_pay) * 100)
+                    rev_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_rev / anchor_pay) * 100)
                 except (ZeroDivisionError, OverflowError, ValueError):
                     rev_to_pay_ratio_anchor = 0.0
             
@@ -1152,16 +1048,16 @@ class AnalysisEngine:
                 bud_to_pay_ratio_comp = 0.0
             else:
                 try:
-                    bud_to_pay_ratio_comp = DataUtils.normalize_value((budget_val / comp_pay) * 100)
+                    bud_to_pay_ratio_comp = DataUtils.normalize_value((pay_budget / comp_pay) * 100)
                 except (ZeroDivisionError, OverflowError, ValueError):
                     bud_to_pay_ratio_comp = 0.0
             
             if abs(anchor_pay) < 1e-10:
                 bud_to_pay_ratio_anchor = 0.0
             else:
-                anchor_bud = DataUtils.normalize_value(anchor_budget.get(dept_code, {}).get('Revenue', 0.0))
+                anchor_pay_bud = DataUtils.normalize_value(anchor_budget.get(dept_code, {}).get('Payroll', 0.0))
                 try:
-                    bud_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_bud / anchor_pay) * 100)
+                    bud_to_pay_ratio_anchor = DataUtils.normalize_value((anchor_pay_bud / anchor_pay) * 100)
                 except (ZeroDivisionError, OverflowError, ValueError):
                     bud_to_pay_ratio_anchor = 0.0
             
@@ -1169,13 +1065,18 @@ class AnalysisEngine:
             bud_to_pay_variance = self._calculate_comparison_variance_percentage(bud_to_pay_ratio_comp, bud_to_pay_ratio_anchor)
             
             rows.append({
-                'Row Header': dept_title,
+                'Department Title': dept_title,
                 'Dept Code': dept_code,
-                'Value': comp_val,
-                'Anchor Value': anchor_val,
-                'Budget': budget_val,
-                'Value-Budget Variance %': budget_variance,
-                'Value-Anchor Variance %': rev_variance,
+                'Comparison Revenue': comp_rev,
+                'Anchor Revenue': anchor_rev,
+                'Revenue Budget': rev_budget,
+                'Revenue Variance %': rev_variance,
+                'Revenue Budget Variance %': rev_budget_variance,
+                'Comparison Payroll': comp_pay,
+                'Anchor Payroll': anchor_pay,
+                'Payroll Budget': pay_budget,
+                'Payroll Variance %': pay_variance,
+                'Payroll Budget Variance %': pay_budget_variance,
                 'Revenue-to-Payroll %': rev_to_pay_ratio_comp,
                 'Budget-to-Payroll %': bud_to_pay_ratio_comp,
                 'Revenue-to-Payroll Variance %': rev_to_pay_variance,
@@ -1187,7 +1088,7 @@ class AnalysisEngine:
     def generate_comparison_insights(self, resort_config: Dict[str, Any],
                                     comparison_date: Union[str, datetime],
                                     anchor_date: Union[str, datetime],
-                                    debug: bool = False) -> pd.DataFrame:
+                                    debug: bool = False) -> Dict[str, pd.DataFrame]:
         current_now = datetime.now()
         if isinstance(comparison_date, str):
             comparison_date = datetime.strptime(comparison_date, "%m/%d/%Y")
@@ -1298,20 +1199,31 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
                     date_label="Anchor Date",
                     debug_log_file=debug_log_handle
                 )
-        insights = self._generate_comparison_insights(
-            comparison_revenue, comparison_payroll, comparison_budget, comparison_visits,
-            anchor_revenue, anchor_payroll, anchor_budget, anchor_visits,
+        visit_insights = self._generate_visit_insights(
+            comparison_visits,
+            anchor_visits
+        )
+        
+        financial_insights = self._generate_financial_insights(
+            comparison_revenue, comparison_payroll, comparison_budget,
+            anchor_revenue, anchor_payroll, anchor_budget,
             department_to_title
         )
+        
         if debug and debug_directory:
             insights_file = os.path.join(debug_directory, "comparison_insights.xlsx")
             with pd.ExcelWriter(insights_file, engine='xlsxwriter') as writer:
-                insights.to_excel(writer, sheet_name='Comparison Insights', index=False)
+                visit_insights.to_excel(writer, sheet_name='Visit Analytics', index=False)
+                financial_insights.to_excel(writer, sheet_name='Department Analytics', index=False)
             print(f"✓ Comparison insights exported: {insights_file}")
             if debug_log_handle:
                 debug_log_handle.write(f"\n{'='*80}\nInsight generation complete!\n{'='*80}\n")
                 debug_log_handle.close()
                 print(f"✓ Debug log saved: {os.path.join(debug_directory, 'debugLog.txt')}")
-        return insights
+        
+        return {
+            'visit_analytics': visit_insights,
+            'department_analytics': financial_insights
+        }
 
 
