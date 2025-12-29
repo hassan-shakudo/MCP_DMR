@@ -585,7 +585,7 @@ class AnalysisEngine:
                 if not pd.isna(max_abs) and (pd.isna(data_rows[max_var_col].abs().max()) or max_abs > data_rows[max_var_col].abs().max()):
                     max_var_col = col
         
-        data_rows = data_rows.sort_values(by=max_var_col, ascending=False, na_last=True)
+        data_rows = data_rows.sort_values(by=max_var_col, ascending=False, na_position='last')
         
         top_rows = data_rows.head(n).copy() if len(data_rows) >= n else data_rows.copy()
         bottom_rows = data_rows.tail(n).copy() if len(data_rows) >= n else data_rows.copy()
