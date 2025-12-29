@@ -405,7 +405,9 @@ class AnalysisEngine:
         processed_visits_budget = {name: {} for name in range_names}
         actual_ranges = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
         for range_name in actual_ranges:
-            dataframe = data_store[range_name]['budget']
+            # For Week Ending, use budget_week_ending (actual range) instead of budget (week total)
+            budget_key = 'budget_week_ending' if range_name == "For The Week Ending (Actual)" else 'budget'
+            dataframe = data_store[range_name].get(budget_key, pd.DataFrame())
             if not dataframe.empty:
                 code_col = DataUtils.get_col(dataframe, CandidateColumns.departmentCode)
                 type_col = DataUtils.get_col(dataframe, CandidateColumns.budgetType)
@@ -438,8 +440,71 @@ class AnalysisEngine:
             return "For The Week Ending (Actual)"
         return column_name.replace(" (Budget)", "")
 
-    def _generate_insights_dataframe(self, 
-                                     range_name: str,
+    def _get_range_short_name(self, range_name: str) -> str:
+        """Get short name for range used in column headers."""
+        mapping = {
+            "For The Day (Actual)": "Day",
+            "For The Week Ending (Actual)": "Week Ending",
+            "Month to Date (Actual)": "Month to Date",
+            "For Winter Ending (Actual)": "Winter Ending"
+        }
+        return mapping.get(range_name, range_name)
+
+    def _get_range_data(self, range_name: str, data_type: str, key: str,
+                        processed_visits: Dict, processed_revenue: Dict, processed_payroll: Dict,
+                        processed_budget: Dict, processed_visits_budget: Dict, resort_name: str = '') -> Tuple[float, float, float, float, float]:
+        """Get actual, budget, prior values and variances for a specific range and key."""
+        prior_range_name = range_name.replace("(Actual)", "(Prior Year)")
+        
+        if data_type == 'visits':
+            lookup_key = key
+            budget_lookup_key = DataUtils.process_location_name(key, resort_name) if key else key
+            actual_val = DataUtils.normalize_value(processed_visits.get(range_name, {}).get(lookup_key, 0.0))
+            budget_val = DataUtils.normalize_value(processed_visits_budget.get(range_name, {}).get(budget_lookup_key, 0.0))
+            prior_val = DataUtils.normalize_value(processed_visits.get(prior_range_name, {}).get(lookup_key, 0.0))
+        elif data_type == 'payroll':
+            lookup_key = DataUtils.trim_dept_code(key) if key else key
+            actual_val = DataUtils.normalize_value(processed_payroll.get(range_name, {}).get(lookup_key, 0.0))
+            budget_val = DataUtils.normalize_value(processed_budget.get(range_name, {}).get(lookup_key, {}).get('Payroll', 0.0))
+            prior_val = DataUtils.normalize_value(processed_payroll.get(prior_range_name, {}).get(lookup_key, 0.0))
+        elif data_type == 'revenue':
+            lookup_key = DataUtils.trim_dept_code(key) if key else key
+            actual_val = DataUtils.normalize_value(processed_revenue.get(range_name, {}).get(lookup_key, 0.0))
+            budget_val = DataUtils.normalize_value(processed_budget.get(range_name, {}).get(lookup_key, {}).get('Revenue', 0.0))
+            prior_val = DataUtils.normalize_value(processed_revenue.get(prior_range_name, {}).get(lookup_key, 0.0))
+        else:
+            actual_val = budget_val = prior_val = 0.0
+        
+        var_budget = DataUtils.calculate_variance_percentage(budget_val, actual_val)
+        var_prior = DataUtils.calculate_variance_percentage(prior_val, actual_val)
+        
+        return actual_val, budget_val, prior_val, var_budget, var_prior
+
+    def _build_insights_row(self, row_header: str, dept_code: str, column_names: List[str],
+                           range_names: List[str], data_type: str, key: str,
+                           processed_visits: Dict, processed_revenue: Dict, processed_payroll: Dict,
+                           processed_budget: Dict, processed_visits_budget: Dict, resort_name: str = '') -> Dict:
+        """Build a single row for insights dataframe."""
+        row = {col: '' for col in column_names}
+        row['Row Header'] = row_header
+        row['Dept Code'] = dept_code
+        
+        for range_name in range_names:
+            actual, budget, prior, var_budget, var_prior = self._get_range_data(
+                range_name, data_type, key, processed_visits, processed_revenue,
+                processed_payroll, processed_budget, processed_visits_budget, resort_name
+            )
+            range_short = self._get_range_short_name(range_name)
+            
+            row[f'Value ({range_short} - Actual)'] = actual
+            row[f'Budget ({range_short} - Actual)'] = budget
+            row[f'Value ({range_short} - Prior year)'] = prior
+            row[f'Value-Budget Variance % ({range_short} Actual)'] = var_budget
+            row[f'Actual-Prior value Variance % ({range_short})'] = var_prior
+        
+        return row
+
+    def _generate_insights_dataframe(self,
                                      processed_visits: Dict,
                                      processed_revenue: Dict,
                                      processed_payroll: Dict,
@@ -449,106 +514,153 @@ class AnalysisEngine:
                                      all_departments: Set[str],
                                      department_to_title: Dict,
                                      resort_name: str) -> pd.DataFrame:
-        prior_range_name = range_name.replace("(Actual)", "(Prior Year)")
+        """Generate consolidated insights dataframe with all time periods in columns."""
         rows = []
+        actual_range_names = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
         
-        rows.append({
-            'Row Header': 'Visits',
-            'Dept Code': '',
-            'Actual': '',
-            'Budget': '',
-            'Actual-Budget Variance %': '',
-            'Prior Year': '',
-            'Actual-Prior Variance %': ''
-        })
+        column_names = ['Row Header', 'Dept Code']
+        for range_name in actual_range_names:
+            range_short = self._get_range_short_name(range_name)
+            column_names.extend([
+                f'Value ({range_short} - Actual)',
+                f'Budget ({range_short} - Actual)',
+                f'Value ({range_short} - Prior year)',
+                f'Value-Budget Variance % ({range_short} Actual)',
+                f'Actual-Prior value Variance % ({range_short})'
+            ])
         
-        actual_visits = processed_visits.get(range_name, {})
-        budget_visits = processed_visits_budget.get(range_name, {})
-        prior_visits = processed_visits.get(prior_range_name, {})
+        row = {col: '' for col in column_names}
+        row['Row Header'] = 'Visits'
+        rows.append(row)
         
         for location in sorted(all_locations):
-            actual_val = DataUtils.normalize_value(actual_visits.get(location, 0.0))
-            budget_val = DataUtils.normalize_value(budget_visits.get(location, 0.0))
-            prior_val = DataUtils.normalize_value(prior_visits.get(location, 0.0))
-            
-            rows.append({
-                'Row Header': location,
-                'Dept Code': '',
-                'Actual': actual_val,
-                'Budget': budget_val,
-                'Actual-Budget Variance %': DataUtils.calculate_variance_percentage(budget_val, actual_val),
-                'Prior Year': prior_val,
-                'Actual-Prior Variance %': DataUtils.calculate_variance_percentage(prior_val, actual_val)
-            })
+            rows.append(self._build_insights_row(location, '', column_names, actual_range_names,
+                                                'visits', location, processed_visits, processed_revenue,
+                                                processed_payroll, processed_budget, processed_visits_budget, resort_name))
         
-        rows.append({
-            'Row Header': 'Payroll',
-            'Dept Code': '',
-            'Actual': '',
-            'Budget': '',
-            'Actual-Budget Variance %': '',
-            'Prior Year': '',
-            'Actual-Prior Variance %': ''
-        })
-        
-        actual_payroll = processed_payroll.get(range_name, {})
-        budget_payroll = processed_budget.get(range_name, {})
-        prior_payroll = processed_payroll.get(prior_range_name, {})
+        row = {col: '' for col in column_names}
+        row['Row Header'] = 'Payroll'
+        rows.append(row)
         
         for dept_code in sorted(all_departments):
             dept_title = department_to_title.get(dept_code, dept_code)
-            actual_val = DataUtils.normalize_value(actual_payroll.get(dept_code, 0.0))
-            budget_val = DataUtils.normalize_value(budget_payroll.get(dept_code, {}).get('Payroll', 0.0))
-            prior_val = DataUtils.normalize_value(prior_payroll.get(dept_code, 0.0))
-            
-            rows.append({
-                'Row Header': dept_title,
-                'Dept Code': dept_code,
-                'Actual': actual_val,
-                'Budget': budget_val,
-                'Actual-Budget Variance %': DataUtils.calculate_variance_percentage(budget_val, actual_val),
-                'Prior Year': prior_val,
-                'Actual-Prior Variance %': DataUtils.calculate_variance_percentage(prior_val, actual_val)
-            })
+            rows.append(self._build_insights_row(dept_title, dept_code, column_names, actual_range_names,
+                                                'payroll', dept_code, processed_visits, processed_revenue,
+                                                processed_payroll, processed_budget, processed_visits_budget, resort_name))
         
-        rows.append({
-            'Row Header': 'Revenue',
-            'Dept Code': '',
-            'Actual': '',
-            'Budget': '',
-            'Actual-Budget Variance %': '',
-            'Prior Year': '',
-            'Actual-Prior Variance %': ''
-        })
-        
-        actual_revenue = processed_revenue.get(range_name, {})
-        budget_data = processed_budget.get(range_name, {})
-        prior_revenue = processed_revenue.get(prior_range_name, {})
+        row = {col: '' for col in column_names}
+        row['Row Header'] = 'Revenue'
+        rows.append(row)
         
         for dept_code in sorted(all_departments):
             dept_title = department_to_title.get(dept_code, dept_code)
-            actual_val = DataUtils.normalize_value(actual_revenue.get(dept_code, 0.0))
-            budget_val = DataUtils.normalize_value(budget_data.get(dept_code, {}).get('Revenue', 0.0))
-            prior_val = DataUtils.normalize_value(prior_revenue.get(dept_code, 0.0))
-            
-            rows.append({
-                'Row Header': dept_title,
-                'Dept Code': dept_code,
-                'Actual': actual_val,
-                'Budget': budget_val,
-                'Actual-Budget Variance %': DataUtils.calculate_variance_percentage(budget_val, actual_val),
-                'Prior Year': prior_val,
-                'Actual-Prior Variance %': DataUtils.calculate_variance_percentage(prior_val, actual_val)
-            })
+            rows.append(self._build_insights_row(dept_title, dept_code, column_names, actual_range_names,
+                                                'revenue', dept_code, processed_visits, processed_revenue,
+                                                processed_payroll, processed_budget, processed_visits_budget, resort_name))
         
         return pd.DataFrame(rows)
 
+    def _get_top_bottom_rows(self, df: pd.DataFrame, n: int = 3) -> Dict[str, pd.DataFrame]:
+        """Extract top and bottom N rows based on variance columns, excluding section headers."""
+        variance_cols = [col for col in df.columns if 'Variance %' in col]
+        if not variance_cols or df.empty:
+            return {'top': pd.DataFrame(), 'bottom': pd.DataFrame()}
+        
+        if 'Row Header' in df.columns:
+            data_rows = df[df['Row Header'].notna() & (df['Row Header'] != '') & 
+                          (~df['Row Header'].isin(['Visits', 'Payroll', 'Revenue']))].copy()
+        else:
+            data_rows = df.copy()
+        
+        if data_rows.empty:
+            return {'top': pd.DataFrame(), 'bottom': pd.DataFrame()}
+        
+        for col in variance_cols:
+            data_rows[col] = pd.to_numeric(data_rows[col], errors='coerce')
+        
+        max_var_col = variance_cols[0]
+        for col in variance_cols:
+            if not data_rows[col].isna().all():
+                max_abs = data_rows[col].abs().max()
+                if not pd.isna(max_abs) and (pd.isna(data_rows[max_var_col].abs().max()) or max_abs > data_rows[max_var_col].abs().max()):
+                    max_var_col = col
+        
+        data_rows = data_rows.sort_values(by=max_var_col, ascending=False, na_last=True)
+        
+        top_rows = data_rows.head(n).copy() if len(data_rows) >= n else data_rows.copy()
+        bottom_rows = data_rows.tail(n).copy() if len(data_rows) >= n else data_rows.copy()
+        
+        return {'top': top_rows, 'bottom': bottom_rows}
+
+    def _log_top_bottom_insights(self, df: pd.DataFrame, insight_type: str, resort_name: str, 
+                                 report_date_string: str, file_name_postfix: str = None):
+        """Log and export top/bottom 3 insights with full rows."""
+        top_bottom = self._get_top_bottom_rows(df, n=3)
+        
+        if top_bottom['top'].empty and top_bottom['bottom'].empty:
+            return
+        
+        print(f"\n{'='*80}")
+        print(f"📊 {insight_type} INSIGHTS - TOP 3 VARIANCE ROWS")
+        print(f"{'='*80}")
+        if not top_bottom['top'].empty:
+            print(top_bottom['top'].to_string(index=False))
+        else:
+            print("No data available")
+        
+        print(f"\n{'='*80}")
+        print(f"📊 {insight_type} INSIGHTS - BOTTOM 3 VARIANCE ROWS")
+        print(f"{'='*80}")
+        if not top_bottom['bottom'].empty:
+            print(top_bottom['bottom'].to_string(index=False))
+        else:
+            print("No data available")
+        
+        useful_df = pd.concat([top_bottom['top'], top_bottom['bottom']], ignore_index=True)
+        if not useful_df.empty:
+            useful_file = os.path.join(self.output_dir, 
+                f"useful_{insight_type}_Insights_{DataUtils.sanitize_filename(resort_name)}_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
+            
+            workbook = xlsxwriter.Workbook(useful_file, {'nan_inf_to_errors': True})
+            worksheet = workbook.add_worksheet("Top & Bottom 3")
+            
+            header_format = workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#D3D3D3', 'border': 1, 'text_wrap': True})
+            data_format = workbook.add_format({'border': 1, 'num_format': '#,##0.00'})
+            percent_format = workbook.add_format({'border': 1, 'num_format': '0.00"%"'})
+            empty_format = workbook.add_format({'border': 1})
+            
+            for col_idx, col_name in enumerate(useful_df.columns):
+                worksheet.write(0, col_idx, col_name, header_format)
+            
+            for row_idx, (_, row) in enumerate(useful_df.iterrows(), start=1):
+                for col_idx, col_name in enumerate(useful_df.columns):
+                    cell_value = row[col_name]
+                    if pd.isna(cell_value) or cell_value == '':
+                        worksheet.write(row_idx, col_idx, '', empty_format)
+                    elif 'Variance %' in col_name or '%' in col_name:
+                        worksheet.write(row_idx, col_idx, cell_value, percent_format)
+                    elif any(x in col_name for x in ['Value', 'Budget', 'Revenue', 'Payroll', 'Visits', 'Comparison', 'Anchor']):
+                        try:
+                            float_val = float(cell_value)
+                            worksheet.write(row_idx, col_idx, float_val, data_format)
+                        except (ValueError, TypeError):
+                            worksheet.write(row_idx, col_idx, cell_value, empty_format)
+                    else:
+                        worksheet.write(row_idx, col_idx, cell_value, empty_format)
+            
+            for col_idx in range(len(useful_df.columns)):
+                worksheet.set_column(col_idx, col_idx, 18)
+            
+            worksheet.freeze_panes(1, 0)
+            workbook.close()
+            print(f"\n✓ Useful insights exported: {useful_file}")
+
     def _export_insights_to_excel(self, 
-                                   insights_dataframes: Dict[str, pd.DataFrame],
+                                   insights_dataframe: pd.DataFrame,
                                    resort_name: str,
                                    report_date_string: str,
                                    file_name_postfix: str = None) -> str:
-        if not insights_dataframes:
+        if insights_dataframe is None or insights_dataframe.empty or len(insights_dataframe.columns) == 0:
             return None
         
         file_path = os.path.join(self.output_dir, f"{DataUtils.sanitize_filename(resort_name)}_dmr_insights_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
@@ -562,53 +674,36 @@ class AnalysisEngine:
         percent_format = workbook.add_format({'border': 1, 'num_format': '0.00"%"'})
         empty_format = workbook.add_format({'border': 1})
         
-        sheets_created = 0
-        for range_name, df in insights_dataframes.items():
-            if df is None or df.empty or len(df.columns) == 0:
-                continue
-                
-            sheet_name = DataUtils.sanitize_filename(range_name)[:31]
-            worksheet = workbook.add_worksheet(sheet_name)
-            sheets_created += 1
-            
-            for col_idx, col_name in enumerate(df.columns):
-                worksheet.write(0, col_idx, col_name, header_format)
-            
-            for row_idx, (_, row) in enumerate(df.iterrows(), start=1):
-                for col_idx, col_name in enumerate(df.columns):
-                    cell_value = row[col_name]
-                    
-                    if col_name == 'Row Header':
-                        if pd.notna(cell_value) and cell_value != '':
-                            if cell_value in ['Visits', 'Payroll', 'Revenue']:
-                                worksheet.write(row_idx, col_idx, cell_value, section_header_format)
-                            else:
-                                worksheet.write(row_idx, col_idx, cell_value, row_header_format)
-                        else:
-                            worksheet.write(row_idx, col_idx, '', empty_format)
-                    elif col_name == 'Dept Code':
-                        worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', empty_format)
-                    elif 'Variance %' in col_name:
-                        if pd.notna(cell_value) and cell_value != '':
-                            worksheet.write(row_idx, col_idx, cell_value, percent_format)
-                        else:
-                            worksheet.write(row_idx, col_idx, '', empty_format)
-                    elif col_name in ['Actual', 'Budget', 'Prior Year']:
-                        if pd.notna(cell_value) and cell_value != '':
-                            worksheet.write(row_idx, col_idx, cell_value, data_format)
-                        else:
-                            worksheet.write(row_idx, col_idx, '', empty_format)
-                    else:
-                        worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', empty_format)
-            
-            worksheet.set_column(0, 0, 30)
-            worksheet.set_column(1, 1, 15)
-            worksheet.set_column(2, 5, 18)
-            worksheet.freeze_panes(1, 0)
+        worksheet = workbook.add_worksheet("Insights")
         
-        if sheets_created == 0:
-            workbook.close()
-            return None
+        for col_idx, col_name in enumerate(insights_dataframe.columns):
+            worksheet.write(0, col_idx, col_name, header_format)
+        
+        for row_idx, (_, row) in enumerate(insights_dataframe.iterrows(), start=1):
+            for col_idx, col_name in enumerate(insights_dataframe.columns):
+                cell_value = row[col_name]
+                
+                if col_name == 'Row Header':
+                    if pd.notna(cell_value) and cell_value != '':
+                        format_to_use = section_header_format if cell_value in ['Visits', 'Payroll', 'Revenue'] else row_header_format
+                        worksheet.write(row_idx, col_idx, cell_value, format_to_use)
+                    else:
+                        worksheet.write(row_idx, col_idx, '', empty_format)
+                elif col_name == 'Dept Code':
+                    worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', empty_format)
+                elif 'Variance %' in col_name:
+                    format_to_use = percent_format if (pd.notna(cell_value) and cell_value != '') else empty_format
+                    worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', format_to_use)
+                elif 'Value' in col_name or 'Budget' in col_name:
+                    format_to_use = data_format if (pd.notna(cell_value) and cell_value != '') else empty_format
+                    worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', format_to_use)
+                else:
+                    worksheet.write(row_idx, col_idx, cell_value if pd.notna(cell_value) else '', empty_format)
+        
+        worksheet.set_column(0, 0, 30)
+        worksheet.set_column(1, 1, 15)
+        worksheet.set_column(2, len(insights_dataframe.columns) - 1, 18)
+        worksheet.freeze_panes(1, 2)
             
         workbook.close()
         print(f"✓ DMR Insights saved: {file_path}")
@@ -777,12 +872,21 @@ class AnalysisEngine:
                     if name in actual_range_names:
                         data_store[name]['payroll'] = stored_procedures_handler.execute_payroll(resort_name, start, end)
                         data_store[name]['salary_payroll'] = stored_procedures_handler.execute_payroll_salary(resort_name, start, end)
-                        budget_start, budget_end = (date_calculator.week_total_actual() if name == "For The Week Ending (Actual)" else (start, end))
-                        data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
+                        # For Week Ending, we need both week total budget and week ending actual budget
+                        if name == "For The Week Ending (Actual)":
+                            # Week total budget (Monday-Sunday full week) - stored in main budget key
+                            budget_start, budget_end = date_calculator.week_total_actual()
+                            data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
+                            # Week ending actual budget (Monday to report date) - stored separately
+                            week_ending_budget_start, week_ending_budget_end = start, end
+                            data_store[name]['budget_week_ending'] = stored_procedures_handler.execute_budget(resort_name, week_ending_budget_start, week_ending_budget_end)
+                        else:
+                            budget_start, budget_end = start, end
+                            data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
                     else:
                         data_store[name]['payroll_history'] = stored_procedures_handler.execute_payroll_history(resort_name, start, end)
 
-                for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'payroll_history']:
+                for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'budget_week_ending', 'payroll_history']:
                     if key not in data_store[name]: data_store[name][key] = pd.DataFrame()
                     if debug and not data_store[name][key].empty:
                         self._export_sp_result(data_store[name][key], name, key.capitalize(), resort_name, debug_directory)
@@ -839,39 +943,32 @@ class AnalysisEngine:
             result['report_path'] = file_path
 
         if generate_insights:
-            insights_dataframes = {}
-            for range_name in actual_range_names:
-                try:
-                    insights_df = self._generate_insights_dataframe(
-                        range_name=range_name,
-                        processed_visits=processed_visits,
-                        processed_revenue=processed_revenue,
-                        processed_payroll=processed_payroll,
-                        processed_budget=processed_budget,
-                        processed_visits_budget=processed_visits_budget,
-                        all_locations=locations_set,
-                        all_departments=departments_set,
-                        department_to_title=code_to_title_map,
-                        resort_name=resort_name
-                    )
-                    if insights_df is not None and not insights_df.empty:
-                        insights_dataframes[range_name] = insights_df
-                except Exception as e:
-                    print(f"⚠️  Warning: Failed to generate insights for {range_name}: {e}")
-                    continue
-            
-            if insights_dataframes:
-                try:
+            try:
+                insights_df = self._generate_insights_dataframe(
+                    processed_visits=processed_visits,
+                    processed_revenue=processed_revenue,
+                    processed_payroll=processed_payroll,
+                    processed_budget=processed_budget,
+                    processed_visits_budget=processed_visits_budget,
+                    all_locations=locations_set,
+                    all_departments=departments_set,
+                    department_to_title=code_to_title_map,
+                    resort_name=resort_name
+                )
+                if insights_df is not None and not insights_df.empty:
                     insights_path = self._export_insights_to_excel(
-                        insights_dataframes=insights_dataframes,
+                        insights_dataframe=insights_df,
                         resort_name=resort_name,
                         report_date_string=report_date_string,
                         file_name_postfix=file_name_postfix
                     )
                     if insights_path:
                         result['insights_path'] = insights_path
-                except Exception as e:
-                    print(f"⚠️  Warning: Failed to export DMR insights: {e}")
+                        self._log_top_bottom_insights(insights_df, "DMR", resort_name, report_date_string, file_name_postfix)
+            except Exception as e:
+                print(f"⚠️  Warning: Failed to generate DMR insights: {e}")
+                import traceback
+                traceback.print_exc()
 
         if debug_log_handle: debug_log_handle.close()
         return result
@@ -1210,6 +1307,10 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
             department_to_title
         )
         
+        comparison_date_str = comparison_date.strftime("%Y%m%d")
+        anchor_date_str = anchor_date.strftime("%Y%m%d")
+        report_date_string = f"{comparison_date_str}-{anchor_date_str}"
+        
         if debug and debug_directory:
             insights_file = os.path.join(debug_directory, "comparison_insights.xlsx")
             with pd.ExcelWriter(insights_file, engine='xlsxwriter') as writer:
@@ -1220,6 +1321,11 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
                 debug_log_handle.write(f"\n{'='*80}\nInsight generation complete!\n{'='*80}\n")
                 debug_log_handle.close()
                 print(f"✓ Debug log saved: {os.path.join(debug_directory, 'debugLog.txt')}")
+        
+        if not visit_insights.empty:
+            self._log_top_bottom_insights(visit_insights, "Comparison", resort_name, report_date_string)
+        if not financial_insights.empty:
+            self._log_top_bottom_insights(financial_insights, "Comparison", resort_name, report_date_string)
         
         return {
             'visit_analytics': visit_insights,
