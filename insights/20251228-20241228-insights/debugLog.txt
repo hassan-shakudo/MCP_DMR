@@ -1,0 +1,718 @@
+
+================================================================================
+INSIGHT GENERATION DEBUG LOG
+================================================================================
+Resort: snowbowl
+Comparison Date: 2025-12-28 (Past Date - using full day)
+Anchor Date: 2024-12-28 (Using full day)
+Comparison Date Payroll Method: Actual Ranges
+Anchor Date Payroll Method: Prior Year Ranges
+================================================================================
+
+
+================================================================================
+  📊 PAYROLL CALCULATION BREAKDOWN - Comparison Date
+  Method: Actual Ranges (Contract + Salary)
+================================================================================
+
+  📁 Department: D1000 (Mountain G&A)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $24,126.56
+     ✅ FINAL PAYROLL TOTAL: $24,126.56
+
+  📁 Department: D1010 (Lift Operations)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:47:21, End=2025-12-28 17:01:20, WHrs=9.23, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$169.43
+          Row 2: Start=2025-12-28 06:49:21, End=2025-12-28 17:53:42, WHrs=11.07, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$254.67
+          Row 3: Start=2025-12-28 07:13:00, End=2025-12-28 16:48:45, WHrs=9.60, HCol=0.00, Rate=$19.60, Dlr=$0.00, Wage=$188.08
+          Row 4: Start=2025-12-28 07:45:44, End=2025-12-28 16:32:19, WHrs=8.78, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$161.05
+          Row 5: Start=2025-12-28 08:03:34, End=2025-12-28 16:37:25, WHrs=8.56, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$159.29
+          Row 6: Start=2025-12-28 08:09:49, End=2025-12-28 16:43:16, WHrs=8.56, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$160.03
+          Row 7: Start=2025-12-28 06:58:46, End=2025-12-28 16:57:08, WHrs=9.97, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$185.49
+          Row 8: Start=2025-12-28 07:54:13, End=2025-12-28 16:56:14, WHrs=9.03, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$165.77
+          Row 9: Start=2025-12-28 07:45:30, End=2025-12-28 16:32:07, WHrs=8.78, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$163.25
+          Row 10: Start=2025-12-28 08:03:25, End=2025-12-28 17:04:58, WHrs=9.03, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$186.83
+          Row 11: Start=2025-12-28 07:59:45, End=2025-12-28 17:04:55, WHrs=9.09, HCol=0.00, Rate=$20.95, Dlr=$0.00, Wage=$190.35
+          Row 12: Start=2025-12-28 07:45:00, End=2025-12-28 17:11:11, WHrs=9.44, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$220.34
+          Row 13: Start=2025-12-28 07:49:53, End=2025-12-28 17:00:00, WHrs=9.17, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$171.45
+          Row 14: Start=2025-12-28 07:49:59, End=2025-12-28 16:59:11, WHrs=9.15, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$170.25
+          Row 15: Start=2025-12-28 07:13:21, End=2025-12-28 17:04:18, WHrs=9.85, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$203.88
+          Row 16: Start=2025-12-28 07:54:04, End=2025-12-28 16:45:00, WHrs=8.85, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$165.47
+          Row 17: Start=2025-12-28 08:08:20, End=2025-12-28 16:54:47, WHrs=8.77, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$161.01
+        • Aggregated Contract: $3,076.64
+        • Salary for Range: $4,505.48
+     ✅ FINAL PAYROLL TOTAL: $7,582.12
+
+  📁 Department: D1020 (Lift Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 06:25:18, End=2025-12-28 17:25:00, WHrs=10.99, HCol=0.00, Rate=$27.00, Dlr=$0.00, Wage=$296.86
+          Row 2: Start=2025-12-28 06:25:08, End=2025-12-28 17:13:36, WHrs=10.81, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$218.32
+          Row 3: Start=2025-12-28 06:28:18, End=2025-12-28 17:20:00, WHrs=10.86, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$219.41
+        • Aggregated Contract: $734.59
+        • Salary for Range: $5,858.90
+     ✅ FINAL PAYROLL TOTAL: $6,593.49
+
+  📁 Department: D1030 (Snowmaking)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 12:13:30, End=2025-12-29 00:02:08, WHrs=11.81, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$238.57
+          Row 2: Start=2025-12-28 11:55:12, End=2025-12-29 00:12:06, WHrs=12.28, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$248.09
+          Row 3: Start=2025-12-28 12:04:43, End=2025-12-29 00:20:05, WHrs=12.26, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$247.57
+          Row 4: Start=2025-12-28 12:08:28, End=2025-12-29 00:30:35, WHrs=12.37, HCol=0.00, Rate=$25.70, Dlr=$0.00, Wage=$317.87
+        • Aggregated Contract: $1,052.11
+        • Salary for Range: $4,558.90
+     ✅ FINAL PAYROLL TOTAL: $5,611.01
+
+  📁 Department: D1060 (Terrain Park)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:57:02, End=2025-12-28 18:01:35, WHrs=10.08, HCol=0.00, Rate=$22.50, Dlr=$0.00, Wage=$226.71
+          Row 2: Start=2025-12-28 16:53:43, End=2025-12-29 02:22:35, WHrs=9.48, HCol=0.00, Rate=$24.00, Dlr=$0.00, Wage=$227.55
+          Row 3: Start=2025-12-28 01:45:11, End=2025-12-28 09:57:35, WHrs=8.21, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$188.75
+        • Aggregated Contract: $643.01
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $643.01
+
+  📁 Department: D1070 (Trail Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $5,484.93
+     ✅ FINAL PAYROLL TOTAL: $5,484.93
+
+  📁 Department: D1100 (Vehicle Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 05:29:32, End=2025-12-28 12:41:44, WHrs=7.20, HCol=0.00, Rate=$38.00, Dlr=$0.00, Wage=$273.73
+          Row 2: Start=2025-12-28 13:12:59, End=2025-12-28 16:04:52, WHrs=2.86, HCol=0.00, Rate=$38.00, Dlr=$0.00, Wage=$108.86
+        • Aggregated Contract: $382.59
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $382.59
+
+  📁 Department: D1200 (Ski Patrol)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:45:07, End=2025-12-28 17:42:45, WHrs=9.96, HCol=0.00, Rate=$20.95, Dlr=$0.00, Wage=$208.67
+          Row 2: Start=2025-12-28 07:02:54, End=2025-12-28 17:59:17, WHrs=10.94, HCol=0.00, Rate=$20.95, Dlr=$0.00, Wage=$229.19
+          Row 3: Start=2025-12-28 07:45:16, End=2025-12-28 17:15:16, WHrs=9.50, HCol=0.00, Rate=$19.60, Dlr=$0.00, Wage=$186.20
+          Row 4: Start=2025-12-28 07:46:50, End=2025-12-28 17:37:05, WHrs=9.84, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$203.64
+          Row 5: Start=2025-12-28 08:00:00, End=2025-12-28 17:42:44, WHrs=9.71, HCol=0.00, Rate=$24.80, Dlr=$0.00, Wage=$240.86
+          Row 6: Start=2025-12-28 06:57:08, End=2025-12-28 17:41:17, WHrs=10.74, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$206.66
+          Row 7: Start=2025-12-28 07:30:32, End=2025-12-28 16:55:22, WHrs=9.41, HCol=0.00, Rate=$20.95, Dlr=$0.00, Wage=$197.22
+          Row 8: Start=2025-12-28 07:46:05, End=2025-12-28 17:43:07, WHrs=9.95, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$228.86
+          Row 9: Start=2025-12-28 17:43:37, End=NaT, WHrs=0.00, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$0.00
+          Row 10: Start=2025-12-28 07:45:08, End=2025-12-28 17:41:47, WHrs=9.94, HCol=0.00, Rate=$19.60, Dlr=$0.00, Wage=$194.91
+          Row 11: Start=2025-12-28 07:39:13, End=2025-12-28 18:00:11, WHrs=10.35, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$238.04
+          Row 12: Start=2025-12-28 06:55:29, End=2025-12-28 17:45:03, WHrs=10.83, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$208.40
+          Row 13: Start=2025-12-28 07:00:30, End=2025-12-28 17:33:13, WHrs=10.55, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$203.00
+          Row 14: Start=2025-12-28 07:39:28, End=2025-12-28 17:47:05, WHrs=10.13, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$236.46
+          Row 15: Start=2025-12-28 07:40:21, End=2025-12-28 17:56:50, WHrs=10.27, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$239.91
+          Row 16: Start=2025-12-28 07:37:45, End=2025-12-28 15:45:00, WHrs=8.12, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$156.33
+          Row 17: Start=2025-12-28 07:00:03, End=2025-12-28 18:00:00, WHrs=11.00, HCol=0.00, Rate=$25.00, Dlr=$0.00, Wage=$274.98
+        • Aggregated Contract: $3,453.33
+        • Salary for Range: $9,010.96
+     ✅ FINAL PAYROLL TOTAL: $12,464.29
+
+  📁 Department: D1500 (Tickets)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:19:07, End=2025-12-28 13:33:13, WHrs=6.24, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$120.02
+          Row 2: Start=2025-12-28 07:16:17, End=2025-12-28 17:00:00, WHrs=9.73, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$217.92
+          Row 3: Start=2025-12-28 07:31:28, End=2025-12-28 14:46:43, WHrs=7.25, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$134.93
+          Row 4: Start=2025-12-28 07:31:16, End=2025-12-28 14:49:13, WHrs=7.30, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$140.51
+          Row 5: Start=2025-12-28 07:15:31, End=2025-12-28 14:43:29, WHrs=7.47, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$143.72
+          Row 6: Start=2025-12-28 07:15:11, End=2025-12-28 14:29:58, WHrs=7.25, HCol=0.00, Rate=$19.75, Dlr=$0.00, Wage=$143.12
+          Row 7: Start=2025-12-28 07:18:53, End=2025-12-28 16:40:00, WHrs=9.35, HCol=0.00, Rate=$19.60, Dlr=$0.00, Wage=$183.30
+          Row 8: Start=2025-12-28 07:31:15, End=2025-12-28 16:20:21, WHrs=8.82, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$169.75
+          Row 9: Start=2025-12-28 07:10:50, End=2025-12-28 13:28:27, WHrs=6.29, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$140.98
+          Row 10: Start=2025-12-28 07:15:28, End=2025-12-28 16:45:00, WHrs=9.49, HCol=0.00, Rate=$19.60, Dlr=$0.00, Wage=$186.05
+        • Aggregated Contract: $1,580.30
+        • Salary for Range: $13,427.40
+     ✅ FINAL PAYROLL TOTAL: $15,007.70
+
+  📁 Department: D2000 (Ski School)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:32:29, End=2025-12-28 13:33:01, WHrs=6.01, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$140.31
+          Row 2: Start=2025-12-28 07:28:31, End=2025-12-28 16:33:57, WHrs=9.09, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$212.26
+          Row 3: Start=2025-12-28 11:58:32, End=2025-12-28 16:25:09, WHrs=4.44, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$99.54
+          Row 4: Start=2025-12-28 11:58:05, End=2025-12-28 16:26:08, WHrs=4.47, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$100.07
+          Row 5: Start=2025-12-28 07:25:50, End=2025-12-28 16:31:09, WHrs=9.09, HCol=0.00, Rate=$25.70, Dlr=$0.00, Wage=$233.58
+        • Aggregated Contract: $785.76
+        • Salary for Range: $13,142.46
+     ✅ FINAL PAYROLL TOTAL: $13,928.22
+
+  📁 Department: D3000 (Rentals)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:10:00, End=2025-12-28 13:09:23, WHrs=5.99, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$115.30
+          Row 2: Start=2025-12-28 07:11:23, End=2025-12-28 12:33:19, WHrs=5.37, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$98.46
+          Row 3: Start=2025-12-28 12:57:02, End=2025-12-28 17:29:03, WHrs=4.53, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$83.19
+          Row 4: Start=2025-12-28 06:58:06, End=2025-12-28 17:27:49, WHrs=10.50, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$202.03
+          Row 5: Start=2025-12-28 07:00:04, End=2025-12-28 13:10:33, WHrs=6.17, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$113.31
+          Row 6: Start=2025-12-28 13:38:33, End=2025-12-28 17:27:45, WHrs=3.82, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$70.10
+          Row 7: Start=2025-12-28 06:56:47, End=2025-12-28 13:07:17, WHrs=6.17, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$113.31
+          Row 8: Start=2025-12-28 13:37:17, End=2025-12-28 17:29:33, WHrs=3.87, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$71.03
+          Row 9: Start=2025-12-28 06:57:32, End=2025-12-28 12:34:19, WHrs=5.61, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$103.00
+          Row 10: Start=2025-12-28 07:13:09, End=2025-12-28 12:01:03, WHrs=4.80, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$88.05
+          Row 11: Start=2025-12-28 12:18:17, End=2025-12-28 17:27:43, WHrs=5.16, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$94.64
+          Row 12: Start=2025-12-28 07:12:34, End=2025-12-28 13:57:11, WHrs=6.74, HCol=0.00, Rate=$17.85, Dlr=$0.00, Wage=$120.37
+          Row 13: Start=2025-12-28 14:12:35, End=2025-12-28 17:27:52, WHrs=3.25, HCol=0.00, Rate=$17.85, Dlr=$0.00, Wage=$58.10
+          Row 14: Start=2025-12-28 07:11:18, End=2025-12-28 12:34:16, WHrs=5.38, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$98.77
+          Row 15: Start=2025-12-28 12:56:22, End=2025-12-28 17:27:54, WHrs=4.53, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$83.04
+          Row 16: Start=2025-12-28 07:14:46, End=2025-12-28 13:09:08, WHrs=5.91, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$108.38
+          Row 17: Start=2025-12-28 06:38:02, End=2025-12-28 12:01:39, WHrs=5.39, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$124.05
+          Row 18: Start=2025-12-28 12:32:35, End=2025-12-28 17:32:49, WHrs=5.00, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$115.09
+        • Aggregated Contract: $1,860.23
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $1,860.23
+
+  📁 Department: D3050 (Rental Repair Shop)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:50:23, End=2025-12-28 16:20:45, WHrs=8.51, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$158.21
+          Row 2: Start=2025-12-28 08:07:01, End=2025-12-28 14:03:12, WHrs=5.94, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$138.61
+        • Aggregated Contract: $296.83
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $296.83
+
+  📁 Department: D4031 (Agassiz Retail)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:23:27, End=2025-12-28 17:00:00, WHrs=9.61, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$176.33
+        • Aggregated Contract: $176.33
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $176.33
+
+  📁 Department: D4032 (Hart Prairie Retail)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:24:56, End=2025-12-28 12:37:44, WHrs=5.21, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$95.66
+          Row 2: Start=2025-12-28 12:45:35, End=2025-12-28 13:44:34, WHrs=0.98, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$18.04
+          Row 3: Start=2025-12-28 07:09:53, End=2025-12-28 13:05:13, WHrs=5.92, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$136.21
+          Row 4: Start=2025-12-28 13:21:43, End=2025-12-28 17:25:39, WHrs=4.07, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$93.51
+          Row 5: Start=2025-12-28 07:07:51, End=2025-12-28 12:05:51, WHrs=4.97, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$91.14
+          Row 6: Start=2025-12-28 12:31:29, End=2025-12-28 16:54:20, WHrs=4.38, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$80.39
+        • Aggregated Contract: $514.95
+        • Salary for Range: $4,630.14
+     ✅ FINAL PAYROLL TOTAL: $5,145.09
+
+  📁 Department: D4034 (Fort Valley Lodge)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 09:03:28, End=2025-12-28 17:03:01, WHrs=7.99, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$148.66
+          Row 2: Start=2025-12-28 09:09:38, End=2025-12-28 16:55:41, WHrs=7.77, HCol=0.00, Rate=$18.60, Dlr=$0.00, Wage=$144.48
+        • Aggregated Contract: $293.14
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $293.14
+
+  📁 Department: D5000 (F&B Admin)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $24,447.13
+     ✅ FINAL PAYROLL TOTAL: $24,447.13
+
+  📁 Department: D5110 (Agassiz Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 2: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 3: Start=2025-12-28 08:45:21, End=2025-12-28 17:20:02, WHrs=8.58, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$157.41
+          Row 4: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 5: Start=2025-12-28 10:00:00, End=2025-12-28 14:00:38, WHrs=4.01, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$73.59
+          Row 6: Start=2025-12-28 10:53:29, End=2025-12-28 17:03:27, WHrs=6.17, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$113.15
+          Row 7: Start=2025-12-28 08:09:07, End=2025-12-28 16:24:48, WHrs=8.26, HCol=0.00, Rate=$23.35, Dlr=$0.00, Wage=$192.90
+          Row 8: Start=2025-12-28 09:08:15, End=2025-12-28 17:39:07, WHrs=8.51, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$156.24
+          Row 9: Start=2025-12-28 00:00:00, End=2025-12-28 00:00:00, WHrs=0.00, HCol=0.00, Rate=$18.35, Dlr=$3.00, Wage=$3.00
+          Row 10: Start=2025-12-28 07:43:38, End=2025-12-28 17:14:40, WHrs=9.52, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$213.19
+          Row 11: Start=2025-12-28 08:02:58, End=2025-12-28 16:37:34, WHrs=8.58, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$192.12
+          Row 12: Start=2025-12-28 08:51:41, End=NaT, WHrs=0.00, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$0.00
+          Row 13: Start=2025-12-28 00:00:00, End=2025-12-28 00:00:00, WHrs=0.00, HCol=0.00, Rate=$15.90, Dlr=$5.00, Wage=$5.00
+          Row 14: Start=2025-12-28 10:56:17, End=2025-12-28 17:12:12, WHrs=6.27, HCol=0.00, Rate=$15.90, Dlr=$0.00, Wage=$99.62
+          Row 15: Start=2025-12-28 08:02:41, End=2025-12-28 14:02:53, WHrs=6.00, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$112.26
+        • Aggregated Contract: $1,758.88
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $1,758.88
+
+  📁 Department: D5111 (Hart Prairie Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 2: Start=2025-12-28 08:05:34, End=2025-12-28 12:42:22, WHrs=4.61, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$86.27
+          Row 3: Start=2025-12-28 13:28:44, End=2025-12-28 15:15:41, WHrs=1.78, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$33.33
+          Row 4: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$20.20, Dlr=$0.00, Wage=$161.60
+          Row 5: Start=2025-12-28 07:45:30, End=2025-12-28 16:53:05, WHrs=9.13, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$167.47
+          Row 6: Start=2025-12-28 07:19:14, End=2025-12-28 14:46:05, WHrs=7.45, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$136.66
+          Row 7: Start=2025-12-28 10:11:29, End=2025-12-28 16:30:59, WHrs=6.33, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$116.06
+          Row 8: Start=2025-12-28 07:28:25, End=2025-12-28 16:56:58, WHrs=9.48, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$173.88
+          Row 9: Start=2025-12-28 10:57:23, End=2025-12-28 16:57:04, WHrs=5.99, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$110.00
+          Row 10: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 11: Start=2025-12-28 08:33:09, End=2025-12-28 17:50:12, WHrs=9.28, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$170.36
+          Row 12: Start=2025-12-28 08:36:25, End=2025-12-28 12:13:51, WHrs=3.62, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$66.50
+          Row 13: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 14: Start=2025-12-28 08:05:21, End=2025-12-28 16:36:47, WHrs=8.52, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$159.40
+          Row 15: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 16: Start=2025-12-28 07:20:33, End=2025-12-28 16:55:16, WHrs=9.58, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$175.77
+          Row 17: Start=2025-12-28 07:08:38, End=2025-12-28 16:46:45, WHrs=9.64, HCol=0.00, Rate=$19.65, Dlr=$0.00, Wage=$189.33
+          Row 18: Start=2025-12-28 07:53:31, End=2025-12-28 12:42:28, WHrs=4.82, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$88.37
+          Row 19: Start=2025-12-28 13:29:13, End=2025-12-28 16:41:39, WHrs=3.21, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$58.85
+          Row 20: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.60, Dlr=$0.00, Wage=$148.80
+          Row 21: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 22: Start=2025-12-28 08:46:58, End=2025-12-28 16:54:40, WHrs=8.13, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$149.15
+          Row 23: Start=2025-12-28 14:52:52, End=2025-12-28 16:52:11, WHrs=1.99, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$36.49
+          Row 24: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+          Row 25: Start=2025-12-28 07:19:03, End=2025-12-28 16:52:11, WHrs=9.55, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$175.28
+          Row 26: Start=2025-12-28 08:02:18, End=2025-12-28 10:00:00, WHrs=1.96, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$36.00
+          Row 27: Start=2025-12-28 08:01:29, End=2025-12-28 14:11:36, WHrs=6.17, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$113.19
+          Row 28: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$18.35, Dlr=$0.00, Wage=$146.80
+        • Aggregated Contract: $3,580.38
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $3,580.38
+
+  📁 Department: D5112 (Base Camp Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 14:36:31, End=2025-12-28 21:35:07, WHrs=6.98, HCol=0.00, Rate=$15.90, Dlr=$0.00, Wage=$110.93
+        • Aggregated Contract: $110.93
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $110.93
+
+  📁 Department: D5113 (Fremont Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 10:55:40, End=2025-12-28 14:44:08, WHrs=3.81, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$69.87
+          Row 2: Start=2025-12-28 08:31:30, End=2025-12-28 17:13:11, WHrs=8.69, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$159.55
+          Row 3: Start=2025-12-28 10:31:39, End=2025-12-28 17:07:40, WHrs=6.60, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$121.12
+          Row 4: Start=2025-12-28 08:48:43, End=2025-12-28 17:17:29, WHrs=8.48, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$175.52
+          Row 5: Start=2025-12-28 08:58:09, End=2025-12-28 17:03:30, WHrs=8.09, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$163.40
+          Row 6: Start=2025-12-28 10:57:20, End=2025-12-28 16:32:14, WHrs=5.58, HCol=0.00, Rate=$18.70, Dlr=$0.00, Wage=$104.38
+        • Aggregated Contract: $793.84
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $793.84
+
+  📁 Department: D6030 (Base Camp Hotel)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 21:43:17, End=NaT, WHrs=0.00, HCol=0.00, Rate=$19.65, Dlr=$0.00, Wage=$0.00
+          Row 2: Start=2025-12-28 06:28:58, End=2025-12-28 12:07:24, WHrs=5.64, HCol=0.00, Rate=$18.35, Dlr=$0.00, Wage=$103.50
+          Row 3: Start=2025-12-28 12:50:23, End=2025-12-28 20:54:06, WHrs=8.06, HCol=0.00, Rate=$25.70, Dlr=$0.00, Wage=$207.19
+        • Aggregated Contract: $310.70
+        • Salary for Range: $4,558.90
+     ✅ FINAL PAYROLL TOTAL: $4,869.60
+
+  📁 Department: D6215 (Housekeeping)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 09:03:48, End=2025-12-28 15:54:44, WHrs=6.85, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$138.35
+          Row 2: Start=2025-12-28 09:06:04, End=2025-12-28 14:31:35, WHrs=5.43, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$109.59
+        • Aggregated Contract: $247.94
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $247.94
+
+  📁 Department: D6700 (Resort Services G&A)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $6,500.00
+     ✅ FINAL PAYROLL TOTAL: $6,500.00
+
+  📁 Department: D6721 (Parking)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:31:06, End=2025-12-28 18:28:16, WHrs=10.95, HCol=0.00, Rate=$19.25, Dlr=$0.00, Wage=$210.84
+          Row 2: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$19.25, Dlr=$0.00, Wage=$154.00
+          Row 3: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$19.25, Dlr=$0.00, Wage=$154.00
+          Row 4: Start=2025-12-28 11:29:42, End=2025-12-28 15:31:50, WHrs=4.04, HCol=0.00, Rate=$19.75, Dlr=$0.00, Wage=$79.70
+          Row 5: Start=2025-12-28 12:00:00, End=2025-12-28 12:00:00, WHrs=0.00, HCol=8.00, Rate=$19.60, Dlr=$0.00, Wage=$156.80
+        • Aggregated Contract: $755.34
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $755.34
+
+  📁 Department: D6730 (Security)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$22.40, Dlr=$0.00, Wage=$179.20
+          Row 2: Start=2025-12-28 11:29:19, End=2025-12-28 15:17:39, WHrs=3.81, HCol=0.00, Rate=$22.40, Dlr=$0.00, Wage=$85.24
+          Row 3: Start=2025-12-28 07:51:03, End=2025-12-28 17:22:41, WHrs=9.53, HCol=0.00, Rate=$60.00, Dlr=$0.00, Wage=$571.63
+        • Aggregated Contract: $836.08
+        • Salary for Range: $4,630.14
+     ✅ FINAL PAYROLL TOTAL: $5,466.22
+
+  📁 Department: D6740 (Janitorial)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 16:40:09, End=2025-12-28 18:47:25, WHrs=2.12, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$42.85
+          Row 2: Start=2025-12-28 08:02:07, End=2025-12-28 12:19:29, WHrs=4.29, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$88.79
+          Row 3: Start=2025-12-28 12:48:24, End=2025-12-28 16:42:36, WHrs=3.90, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$80.80
+          Row 4: Start=2025-12-28 09:01:33, End=2025-12-28 15:55:16, WHrs=6.90, HCol=0.00, Rate=$19.65, Dlr=$0.00, Wage=$135.49
+          Row 5: Start=2025-12-28 16:29:25, End=2025-12-28 21:58:26, WHrs=5.48, HCol=0.00, Rate=$21.20, Dlr=$0.00, Wage=$116.25
+          Row 6: Start=2025-12-28 09:34:38, End=2025-12-28 13:05:23, WHrs=3.51, HCol=0.00, Rate=$24.80, Dlr=$0.00, Wage=$87.11
+          Row 7: Start=2025-12-28 13:36:23, End=2025-12-28 18:05:05, WHrs=4.48, HCol=0.00, Rate=$24.80, Dlr=$0.00, Wage=$111.06
+          Row 8: Start=2025-12-28 16:22:32, End=2025-12-28 21:58:50, WHrs=5.61, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$128.92
+          Row 9: Start=2025-12-28 16:23:59, End=2025-12-28 21:55:49, WHrs=5.53, HCol=0.00, Rate=$20.70, Dlr=$0.00, Wage=$114.48
+          Row 10: Start=2025-12-28 16:32:07, End=2025-12-28 21:58:46, WHrs=5.44, HCol=0.00, Rate=$21.45, Dlr=$0.00, Wage=$116.78
+        • Aggregated Contract: $1,022.53
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $1,022.53
+
+  📁 Department: D6760 (Facilities Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:50:26, End=2025-12-28 17:14:51, WHrs=9.41, HCol=0.00, Rate=$26.45, Dlr=$0.00, Wage=$248.81
+        • Aggregated Contract: $248.81
+        • Salary for Range: $5,502.74
+     ✅ FINAL PAYROLL TOTAL: $5,751.55
+
+  📁 Department: D6780 (Grounds Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 09:09:08, End=2025-12-28 20:58:15, WHrs=11.82, HCol=0.00, Rate=$31.26, Dlr=$0.00, Wage=$369.45
+          Row 2: Start=2025-12-28 05:54:37, End=2025-12-28 10:25:39, WHrs=4.52, HCol=0.00, Rate=$30.78, Dlr=$0.00, Wage=$139.04
+          Row 3: Start=2025-12-28 06:04:12, End=2025-12-28 11:00:09, WHrs=4.93, HCol=0.00, Rate=$31.26, Dlr=$0.00, Wage=$154.19
+        • Aggregated Contract: $662.68
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $662.68
+
+  📁 Department: D6781 (Snow Removal)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 01:28:23, End=2025-12-28 07:01:15, WHrs=5.55, HCol=0.00, Rate=$23.85, Dlr=$0.00, Wage=$132.31
+        • Aggregated Contract: $132.31
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $132.31
+
+  📁 Department: D6790 (Transportation)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:00:00, End=2025-12-28 08:00:00, WHrs=0.00, HCol=8.00, Rate=$30.78, Dlr=$0.00, Wage=$246.24
+          Row 2: Start=2025-12-28 07:24:00, End=2025-12-28 17:00:25, WHrs=9.61, HCol=0.00, Rate=$33.81, Dlr=$0.00, Wage=$324.81
+          Row 3: Start=2025-12-28 08:07:42, End=2025-12-28 17:51:22, WHrs=9.73, HCol=0.00, Rate=$32.59, Dlr=$0.00, Wage=$317.03
+          Row 4: Start=2025-12-28 08:37:43, End=2025-12-28 10:57:20, WHrs=2.33, HCol=0.00, Rate=$31.64, Dlr=$0.00, Wage=$73.62
+          Row 5: Start=2025-12-28 08:30:25, End=2025-12-28 18:12:28, WHrs=9.70, HCol=0.00, Rate=$31.64, Dlr=$0.00, Wage=$306.93
+        • Aggregated Contract: $1,268.64
+        • Salary for Range: $0.00
+     ✅ FINAL PAYROLL TOTAL: $1,268.64
+
+  📁 Department: D7010 (Marketing)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:55:01, End=2025-12-28 15:21:07, WHrs=6.43, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$148.00
+        • Aggregated Contract: $148.00
+        • Salary for Range: $8,084.93
+     ✅ FINAL PAYROLL TOTAL: $8,232.93
+
+  📁 Department: D8020 (Accounting)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 08:07:05, End=2025-12-28 14:48:25, WHrs=6.69, HCol=0.00, Rate=$26.75, Dlr=$0.00, Wage=$178.93
+          Row 2: Start=2025-12-28 07:34:15, End=2025-12-28 17:24:14, WHrs=9.83, HCol=0.00, Rate=$23.00, Dlr=$0.00, Wage=$226.16
+        • Aggregated Contract: $405.09
+        • Salary for Range: $15,136.99
+     ✅ FINAL PAYROLL TOTAL: $15,542.08
+
+  📁 Department: D8030 (Executive)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $21,369.86
+     ✅ FINAL PAYROLL TOTAL: $21,369.86
+
+  📁 Department: D8040 (HR)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+          Row 1: Start=2025-12-28 07:53:24, End=2025-12-28 16:05:39, WHrs=8.20, HCol=0.00, Rate=$20.20, Dlr=$0.00, Wage=$165.72
+          Row 2: Start=2025-12-28 07:57:53, End=2025-12-28 16:00:54, WHrs=8.05, HCol=0.00, Rate=$28.40, Dlr=$0.00, Wage=$228.63
+        • Aggregated Contract: $394.35
+        • Salary for Range: $4,772.60
+     ✅ FINAL PAYROLL TOTAL: $5,166.95
+
+  📁 Department: D8050 (Risk Management)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $5,627.40
+     ✅ FINAL PAYROLL TOTAL: $5,627.40
+
+  📁 Department: D8060 (IT Services)
+     ────────────────────────────────────────────────────────────────────────────
+     📋 Contract Payroll (Hourly):
+        • Aggregated Contract: $0.00
+        • Salary for Range: $16,223.29
+     ✅ FINAL PAYROLL TOTAL: $16,223.29
+
+================================================================================
+
+================================================================================
+  📊 PAYROLL CALCULATION BREAKDOWN - Anchor Date
+  Method: Prior Year Ranges (History Only)
+================================================================================
+
+  📁 Department: D1000 (Mountain G&A)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $897.27
+     ✅ FINAL PAYROLL TOTAL: $897.27
+
+  📁 Department: D1010 (Lift Operations)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $6,102.31
+     ✅ FINAL PAYROLL TOTAL: $6,102.31
+
+  📁 Department: D1020 (Lift Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $1,478.37
+     ✅ FINAL PAYROLL TOTAL: $1,478.37
+
+  📁 Department: D1030 (Snowmaking)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $2,109.65
+     ✅ FINAL PAYROLL TOTAL: $2,109.65
+
+  📁 Department: D1060 (Terrain Park)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $558.27
+     ✅ FINAL PAYROLL TOTAL: $558.27
+
+  📁 Department: D1070 (Trail Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $560.15
+     ✅ FINAL PAYROLL TOTAL: $560.15
+
+  📁 Department: D1100 (Vehicle Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $492.71
+     ✅ FINAL PAYROLL TOTAL: $492.71
+
+  📁 Department: D1200 (Ski Patrol)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $3,254.79
+     ✅ FINAL PAYROLL TOTAL: $3,254.79
+
+  📁 Department: D1500 (Tickets)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $2,306.32
+     ✅ FINAL PAYROLL TOTAL: $2,306.32
+
+  📁 Department: D2000 (Ski School)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $5,956.52
+     ✅ FINAL PAYROLL TOTAL: $5,956.52
+
+  📁 Department: D3000 (Rentals)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $2,925.02
+     ✅ FINAL PAYROLL TOTAL: $2,925.02
+
+  📁 Department: D3050 (Rental Repair Shop)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $311.23
+     ✅ FINAL PAYROLL TOTAL: $311.23
+
+  📁 Department: D4031 (Agassiz Retail)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $43.23
+     ✅ FINAL PAYROLL TOTAL: $43.23
+
+  📁 Department: D4032 (Hart Prairie Retail)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $949.95
+     ✅ FINAL PAYROLL TOTAL: $949.95
+
+  📁 Department: D4034 (Fort Valley Lodge)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $314.21
+     ✅ FINAL PAYROLL TOTAL: $314.21
+
+  📁 Department: D5000 (F&B Admin)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $928.53
+     ✅ FINAL PAYROLL TOTAL: $928.53
+
+  📁 Department: D5110 (Agassiz Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $1,463.54
+     ✅ FINAL PAYROLL TOTAL: $1,463.54
+
+  📁 Department: D5111 (Hart Prairie Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $2,663.31
+     ✅ FINAL PAYROLL TOTAL: $2,663.31
+
+  📁 Department: D5112 (Base Camp Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $571.65
+     ✅ FINAL PAYROLL TOTAL: $571.65
+
+  📁 Department: D5113 (Fremont Restaurant)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $445.49
+     ✅ FINAL PAYROLL TOTAL: $445.49
+
+  📁 Department: D5820 (D5820)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $40.50
+     ✅ FINAL PAYROLL TOTAL: $40.50
+
+  📁 Department: D6030 (Base Camp Hotel)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $649.11
+     ✅ FINAL PAYROLL TOTAL: $649.11
+
+  📁 Department: D6215 (Housekeeping)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $384.16
+     ✅ FINAL PAYROLL TOTAL: $384.16
+
+  📁 Department: D6700 (Resort Services G&A)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $208.58
+     ✅ FINAL PAYROLL TOTAL: $208.58
+
+  📁 Department: D6721 (Parking)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $669.41
+     ✅ FINAL PAYROLL TOTAL: $669.41
+
+  📁 Department: D6730 (Security)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $655.33
+     ✅ FINAL PAYROLL TOTAL: $655.33
+
+  📁 Department: D6740 (Janitorial)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $928.32
+     ✅ FINAL PAYROLL TOTAL: $928.32
+
+  📁 Department: D6760 (Facilities Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $532.64
+     ✅ FINAL PAYROLL TOTAL: $532.64
+
+  📁 Department: D6780 (Grounds Maintenance)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $218.34
+     ✅ FINAL PAYROLL TOTAL: $218.34
+
+  📁 Department: D6790 (Transportation)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $742.10
+     ✅ FINAL PAYROLL TOTAL: $742.10
+
+  📁 Department: D7010 (Marketing)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $632.91
+     ✅ FINAL PAYROLL TOTAL: $632.91
+
+  📁 Department: D8010 (General Administration)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $931.04
+     ✅ FINAL PAYROLL TOTAL: $931.04
+
+  📁 Department: D8020 (Accounting)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $543.96
+     ✅ FINAL PAYROLL TOTAL: $543.96
+
+  📁 Department: D8030 (Executive)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $824.18
+     ✅ FINAL PAYROLL TOTAL: $824.18
+
+  📁 Department: D8040 (HR)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $506.34
+     ✅ FINAL PAYROLL TOTAL: $506.34
+
+  📁 Department: D8050 (Risk Management)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $377.97
+     ✅ FINAL PAYROLL TOTAL: $377.97
+
+  📁 Department: D8060 (IT Services)
+     ────────────────────────────────────────────────────────────────────────────
+        • Contract: (Not used for Prior Year)
+        • Salary: (Not used for Prior Year)
+        • Historical Total: $697.76
+     ✅ FINAL PAYROLL TOTAL: $697.76
+
+================================================================================
+
+================================================================================
+Insight generation complete!
+================================================================================
