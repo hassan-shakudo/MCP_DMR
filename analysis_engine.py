@@ -560,11 +560,14 @@ class AnalysisEngine:
         
         return pd.DataFrame(rows)
 
-    def _get_top_bottom_rows(self, df: pd.DataFrame, n: int = 3) -> Dict[str, pd.DataFrame]:
-        """Extract top and bottom N rows based on variance columns, excluding section headers."""
+    def _get_top_bottom_rows(self, df: pd.DataFrame, n: int = 3) -> Dict[str, Dict[str, pd.DataFrame]]:
+        """Extract top and bottom N rows for each variance column, excluding section headers."""
+        if df is None or df.empty:
+            return {}
+        
         variance_cols = [col for col in df.columns if 'Variance %' in col]
-        if not variance_cols or df.empty:
-            return {'top': pd.DataFrame(), 'bottom': pd.DataFrame()}
+        if not variance_cols:
+            return {}
         
         if 'Row Header' in df.columns:
             data_rows = df[df['Row Header'].notna() & (df['Row Header'] != '') & 
@@ -573,87 +576,209 @@ class AnalysisEngine:
             data_rows = df.copy()
         
         if data_rows.empty:
-            return {'top': pd.DataFrame(), 'bottom': pd.DataFrame()}
+            return {}
         
         for col in variance_cols:
-            data_rows[col] = pd.to_numeric(data_rows[col], errors='coerce')
+            if col in data_rows.columns:
+                data_rows[col] = pd.to_numeric(data_rows[col], errors='coerce')
         
-        max_var_col = variance_cols[0]
-        for col in variance_cols:
-            if not data_rows[col].isna().all():
-                max_abs = data_rows[col].abs().max()
-                if not pd.isna(max_abs) and (pd.isna(data_rows[max_var_col].abs().max()) or max_abs > data_rows[max_var_col].abs().max()):
-                    max_var_col = col
+        result = {}
+        for variance_col in variance_cols:
+            if variance_col not in data_rows.columns:
+                continue
+            if data_rows[variance_col].isna().all():
+                continue
+            
+            try:
+                sorted_rows = data_rows.sort_values(
+                    by=variance_col, 
+                    ascending=False, 
+                    na_position='last'
+                ).copy()
+                
+                top_rows = sorted_rows.head(n).copy() if len(sorted_rows) >= n else sorted_rows.copy()
+                bottom_rows = sorted_rows.tail(n).copy() if len(sorted_rows) >= n else sorted_rows.copy()
+                
+                if not top_rows.empty or not bottom_rows.empty:
+                    result[variance_col] = {
+                        'top': top_rows,
+                        'bottom': bottom_rows
+                    }
+            except (KeyError, ValueError):
+                continue
         
-        data_rows = data_rows.sort_values(by=max_var_col, ascending=False, na_position='last')
-        
-        top_rows = data_rows.head(n).copy() if len(data_rows) >= n else data_rows.copy()
-        bottom_rows = data_rows.tail(n).copy() if len(data_rows) >= n else data_rows.copy()
-        
-        return {'top': top_rows, 'bottom': bottom_rows}
+        return result
 
     def _log_top_bottom_insights(self, df: pd.DataFrame, insight_type: str, resort_name: str, 
                                  report_date_string: str, file_name_postfix: str = None):
-        """Log and export top/bottom 3 insights with full rows."""
-        top_bottom = self._get_top_bottom_rows(df, n=3)
+        """Log and export top/bottom 3 insights with full rows for each variance column."""
+        if df is None or df.empty:
+            return
         
-        if top_bottom['top'].empty and top_bottom['bottom'].empty:
+        variance_top_bottom_dict = self._get_top_bottom_rows(df, n=3)
+        if not variance_top_bottom_dict:
+            return
+        
+        has_data = any(
+            not top_bottom['top'].empty or not top_bottom['bottom'].empty
+            for top_bottom in variance_top_bottom_dict.values()
+        )
+        if not has_data:
             return
         
         print(f"\n{'='*80}")
-        print(f"📊 {insight_type} INSIGHTS - TOP 3 VARIANCE ROWS")
+        print(f"📊 {insight_type} INSIGHTS - TOP & BOTTOM 3 BY VARIANCE CATEGORY")
         print(f"{'='*80}")
-        if not top_bottom['top'].empty:
-            print(top_bottom['top'].to_string(index=False))
-        else:
-            print("No data available")
         
-        print(f"\n{'='*80}")
-        print(f"📊 {insight_type} INSIGHTS - BOTTOM 3 VARIANCE ROWS")
-        print(f"{'='*80}")
-        if not top_bottom['bottom'].empty:
-            print(top_bottom['bottom'].to_string(index=False))
-        else:
-            print("No data available")
+        for variance_col_name, top_bottom in variance_top_bottom_dict.items():
+            if top_bottom['top'].empty and top_bottom['bottom'].empty:
+                continue
+            
+            print(f"\n{'─'*80}")
+            print(f"🔍 VARIANCE CATEGORY: {variance_col_name}")
+            print(f"{'─'*80}")
+            
+            print(f"\n📈 TOP 3 (Highest Variance):")
+            if not top_bottom['top'].empty:
+                print(top_bottom['top'].to_string(index=False))
+            else:
+                print("No data available")
+            
+            print(f"\n📉 BOTTOM 3 (Lowest Variance):")
+            if not top_bottom['bottom'].empty:
+                print(top_bottom['bottom'].to_string(index=False))
+            else:
+                print("No data available")
         
-        useful_df = pd.concat([top_bottom['top'], top_bottom['bottom']], ignore_index=True)
-        if not useful_df.empty:
-            useful_file = os.path.join(self.output_dir, 
-                f"useful_{insight_type}_Insights_{DataUtils.sanitize_filename(resort_name)}_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
+        try:
+            useful_file = os.path.join(
+                self.output_dir, 
+                f"useful_{insight_type}_Insights_{DataUtils.sanitize_filename(resort_name)}_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx"
+            )
             
             workbook = xlsxwriter.Workbook(useful_file, {'nan_inf_to_errors': True})
             worksheet = workbook.add_worksheet("Top & Bottom 3")
             
-            header_format = workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#D3D3D3', 'border': 1, 'text_wrap': True})
+            header_format = workbook.add_format({
+                'bold': True, 
+                'align': 'center', 
+                'bg_color': '#D3D3D3', 
+                'border': 1, 
+                'text_wrap': True
+            })
+            section_header_format = workbook.add_format({
+                'bold': True, 
+                'align': 'left', 
+                'bg_color': '#B8CCE4', 
+                'border': 1,
+                'font_size': 11
+            })
             data_format = workbook.add_format({'border': 1, 'num_format': '#,##0.00'})
             percent_format = workbook.add_format({'border': 1, 'num_format': '0.00"%"'})
             empty_format = workbook.add_format({'border': 1})
             
-            for col_idx, col_name in enumerate(useful_df.columns):
+            column_names = []
+            for top_bottom in variance_top_bottom_dict.values():
+                if not top_bottom['top'].empty:
+                    column_names = list(top_bottom['top'].columns)
+                    break
+                elif not top_bottom['bottom'].empty:
+                    column_names = list(top_bottom['bottom'].columns)
+                    break
+            
+            if not column_names:
+                workbook.close()
+                return
+            
+            for col_idx, col_name in enumerate(column_names):
                 worksheet.write(0, col_idx, col_name, header_format)
             
-            for row_idx, (_, row) in enumerate(useful_df.iterrows(), start=1):
-                for col_idx, col_name in enumerate(useful_df.columns):
-                    cell_value = row[col_name]
-                    if pd.isna(cell_value) or cell_value == '':
-                        worksheet.write(row_idx, col_idx, '', empty_format)
-                    elif 'Variance %' in col_name or '%' in col_name:
-                        worksheet.write(row_idx, col_idx, cell_value, percent_format)
-                    elif any(x in col_name for x in ['Value', 'Budget', 'Revenue', 'Payroll', 'Visits', 'Comparison', 'Anchor']):
-                        try:
-                            float_val = float(cell_value)
-                            worksheet.write(row_idx, col_idx, float_val, data_format)
-                        except (ValueError, TypeError):
-                            worksheet.write(row_idx, col_idx, cell_value, empty_format)
-                    else:
-                        worksheet.write(row_idx, col_idx, cell_value, empty_format)
+            current_row = 1
             
-            for col_idx in range(len(useful_df.columns)):
+            for variance_col_name, top_bottom in variance_top_bottom_dict.items():
+                if top_bottom['top'].empty and top_bottom['bottom'].empty:
+                    continue
+                
+                if current_row > 1:
+                    current_row += 1
+                
+                section_header_text = f"TOP 3 - {variance_col_name}"
+                worksheet.merge_range(
+                    current_row, 0, current_row, len(column_names) - 1,
+                    section_header_text, section_header_format
+                )
+                current_row += 1
+                
+                if not top_bottom['top'].empty:
+                    for _, row in top_bottom['top'].iterrows():
+                        self._write_insight_row(
+                            worksheet, row, column_names, current_row,
+                            data_format, percent_format, empty_format
+                        )
+                        current_row += 1
+                else:
+                    for col_idx in range(len(column_names)):
+                        worksheet.write(current_row, col_idx, '', empty_format)
+                    current_row += 1
+                
+                current_row += 1
+                
+                section_header_text = f"BOTTOM 3 - {variance_col_name}"
+                worksheet.merge_range(
+                    current_row, 0, current_row, len(column_names) - 1,
+                    section_header_text, section_header_format
+                )
+                current_row += 1
+                
+                if not top_bottom['bottom'].empty:
+                    for _, row in top_bottom['bottom'].iterrows():
+                        self._write_insight_row(
+                            worksheet, row, column_names, current_row,
+                            data_format, percent_format, empty_format
+                        )
+                        current_row += 1
+                else:
+                    for col_idx in range(len(column_names)):
+                        worksheet.write(current_row, col_idx, '', empty_format)
+                    current_row += 1
+            
+            for col_idx in range(len(column_names)):
                 worksheet.set_column(col_idx, col_idx, 18)
             
             worksheet.freeze_panes(1, 0)
             workbook.close()
             print(f"\n✓ Useful insights exported: {useful_file}")
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to export insights: {e}")
+    
+    def _write_insight_row(self, worksheet, row: pd.Series, column_names: List[str], 
+                          row_idx: int, data_format, percent_format, empty_format):
+        """Helper method to write a single insight row to Excel worksheet."""
+        for col_idx, col_name in enumerate(column_names):
+            try:
+                if col_name not in row.index:
+                    worksheet.write(row_idx, col_idx, '', empty_format)
+                    continue
+                
+                cell_value = row[col_name]
+                if pd.isna(cell_value) or cell_value == '':
+                    worksheet.write(row_idx, col_idx, '', empty_format)
+                elif 'Variance %' in col_name or '%' in col_name:
+                    try:
+                        val = float(cell_value) if not pd.isna(cell_value) else 0.0
+                        worksheet.write(row_idx, col_idx, val, percent_format)
+                    except (ValueError, TypeError):
+                        worksheet.write(row_idx, col_idx, str(cell_value), empty_format)
+                elif any(x in col_name for x in ['Value', 'Budget', 'Revenue', 'Payroll', 'Visits', 'Comparison', 'Anchor']):
+                    try:
+                        float_val = float(cell_value) if not pd.isna(cell_value) else 0.0
+                        worksheet.write(row_idx, col_idx, float_val, data_format)
+                    except (ValueError, TypeError):
+                        worksheet.write(row_idx, col_idx, str(cell_value), empty_format)
+                else:
+                    worksheet.write(row_idx, col_idx, str(cell_value), empty_format)
+            except Exception:
+                worksheet.write(row_idx, col_idx, '', empty_format)
 
     def _export_insights_to_excel(self, 
                                    insights_dataframe: pd.DataFrame,
