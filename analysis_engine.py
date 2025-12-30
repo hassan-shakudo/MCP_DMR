@@ -96,11 +96,32 @@ class AnalysisEngine:
                     department_to_title[dept_str] = dept_str
         return processed_revenue
 
-    def _process_revenue(self, data_store: Dict, range_names: List[str], all_departments: Set[str], department_to_title: Dict) -> Dict:
+    def _process_revenue(self, data_store: Dict, range_names: List[str], all_departments: Set[str], department_to_title: Dict, debug_log_file: Any = None) -> Dict:
         processed_revenue = {name: {} for name in range_names}
         for range_name in range_names:
+            log_message = f"\n{'='*80}\n  💰 REVENUE CALCULATION BREAKDOWN - {range_name}\n"
+            log_message += f"{'='*80}\n"
+            
             dataframe = data_store[range_name]['revenue']
             processed_revenue[range_name] = self._process_revenue_dataframe(dataframe, department_to_title, all_departments)
+            
+            # Log revenue details for each department
+            if processed_revenue[range_name]:
+                for dept_code in sorted(list(processed_revenue[range_name].keys())):
+                    dept_title = department_to_title.get(dept_code, dept_code)
+                    revenue_total = processed_revenue[range_name][dept_code]
+                    log_message += f"\n  📁 Department: {dept_code} ({dept_title})\n     {'─'*76}\n"
+                    log_message += f"        • Revenue Total: ${revenue_total:,.2f}\n"
+                    log_message += f"     ✅ FINAL REVENUE TOTAL: ${revenue_total:,.2f}\n"
+            else:
+                log_message += "  ⚠️  No revenue data available\n"
+            
+            log_message += f"\n{'='*80}\n"
+            print(log_message, end='')
+            if debug_log_file:
+                debug_log_file.write(log_message)
+                debug_log_file.flush()
+        
         return processed_revenue
 
     def _process_payroll(self, data_store: Dict, range_names: List[str], is_current_date: bool, 
@@ -1021,7 +1042,7 @@ class AnalysisEngine:
         locations_set, departments_set, code_to_title_map = set(), set(), {}
         processed_snow = self._process_snow(data_store, range_names_ordered)
         processed_visits = self._process_visits(data_store, range_names_ordered, locations_set)
-        processed_revenue = self._process_revenue(data_store, range_names_ordered, departments_set, code_to_title_map)
+        processed_revenue = self._process_revenue(data_store, range_names_ordered, departments_set, code_to_title_map, debug_log_handle)
         processed_payroll = self._process_payroll(data_store, range_names_ordered, is_current, 
                                                  actual_range_names, processed_revenue, departments_set, 
                                                  code_to_title_map, debug_log_handle)
