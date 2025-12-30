@@ -153,7 +153,6 @@ class StoredProcedures:
             return cursor.fetchall()
 
 
-# Convenience functions for backwards compatibility
 def execute_revenue_proc(connection: pyodbc.Connection,
                         database: str,
                         group_number: int,

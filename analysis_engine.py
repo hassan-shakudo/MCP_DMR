@@ -405,7 +405,6 @@ class AnalysisEngine:
         processed_visits_budget = {name: {} for name in range_names}
         actual_ranges = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
         for range_name in actual_ranges:
-            # For Week Ending, use budget_week_ending (actual range) instead of budget (week total)
             budget_key = 'budget_week_ending' if range_name == "For The Week Ending (Actual)" else 'budget'
             dataframe = data_store[range_name].get(budget_key, pd.DataFrame())
             if not dataframe.empty:
@@ -590,14 +589,20 @@ class AnalysisEngine:
                 continue
             
             try:
-                sorted_rows = data_rows.sort_values(
+                sorted_rows_desc = data_rows.sort_values(
                     by=variance_col, 
                     ascending=False, 
                     na_position='last'
                 ).copy()
                 
-                top_rows = sorted_rows.head(n).copy() if len(sorted_rows) >= n else sorted_rows.copy()
-                bottom_rows = sorted_rows.tail(n).copy() if len(sorted_rows) >= n else sorted_rows.copy()
+                sorted_rows_asc = data_rows.sort_values(
+                    by=variance_col, 
+                    ascending=True, 
+                    na_position='last'
+                ).copy()
+                
+                top_rows = sorted_rows_desc.head(n).copy() if len(sorted_rows_desc) >= n else sorted_rows_desc.copy()
+                bottom_rows = sorted_rows_asc.head(n).copy() if len(sorted_rows_asc) >= n else sorted_rows_asc.copy()
                 
                 if not top_rows.empty or not bottom_rows.empty:
                     result[variance_col] = {
@@ -997,12 +1002,9 @@ class AnalysisEngine:
                     if name in actual_range_names:
                         data_store[name]['payroll'] = stored_procedures_handler.execute_payroll(resort_name, start, end)
                         data_store[name]['salary_payroll'] = stored_procedures_handler.execute_payroll_salary(resort_name, start, end)
-                        # For Week Ending, we need both week total budget and week ending actual budget
                         if name == "For The Week Ending (Actual)":
-                            # Week total budget (Monday-Sunday full week) - stored in main budget key
                             budget_start, budget_end = date_calculator.week_total_actual()
                             data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
-                            # Week ending actual budget (Monday to report date) - stored separately
                             week_ending_budget_start, week_ending_budget_end = start, end
                             data_store[name]['budget_week_ending'] = stored_procedures_handler.execute_budget(resort_name, week_ending_budget_start, week_ending_budget_end)
                         else:
