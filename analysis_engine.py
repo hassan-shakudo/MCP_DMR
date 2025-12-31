@@ -103,18 +103,46 @@ class AnalysisEngine:
             log_message += f"{'='*80}\n"
             
             dataframe = data_store[range_name]['revenue']
-            processed_revenue[range_name] = self._process_revenue_dataframe(dataframe, department_to_title, all_departments)
             
-            # Log revenue details for each department
-            if processed_revenue[range_name]:
+            if dataframe.empty:
+                log_message += "  ⚠️  No revenue data available\n"
+                processed_revenue[range_name] = {}
+            else:
+                code_col = DataUtils.get_col(dataframe, CandidateColumns.departmentCode) or 'department'
+                title_col = DataUtils.get_col(dataframe, CandidateColumns.departmentTitle) or 'DepartmentTitle'
+                revenue_col = DataUtils.get_col(dataframe, CandidateColumns.revenue) or 'revenue'
+                if not revenue_col:
+                    numeric_cols = dataframe.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 0:
+                        revenue_col = numeric_cols[-1]
+                
+                revenue_rows_by_dept = {}
+                if code_col and revenue_col:
+                    for _, row in dataframe.iterrows():
+                        dept_code = DataUtils.trim_dept_code(row[code_col])
+                        if not dept_code:
+                            continue
+                        revenue_value = DataUtils.normalize_value(row[revenue_col])
+                        if dept_code not in revenue_rows_by_dept:
+                            revenue_rows_by_dept[dept_code] = []
+                        revenue_rows_by_dept[dept_code].append({
+                            'dept_code_raw': row[code_col],
+                            'revenue': revenue_value
+                        })
+                
+                processed_revenue[range_name] = self._process_revenue_dataframe(dataframe, department_to_title, all_departments)
+                
+                # Log revenue details for each department
                 for dept_code in sorted(list(processed_revenue[range_name].keys())):
                     dept_title = department_to_title.get(dept_code, dept_code)
                     revenue_total = processed_revenue[range_name][dept_code]
                     log_message += f"\n  📁 Department: {dept_code} ({dept_title})\n     {'─'*76}\n"
-                    log_message += f"        • Revenue Total: ${revenue_total:,.2f}\n"
+                    log_message += "     📋 Revenue Rows:\n"
+                    rows = revenue_rows_by_dept.get(dept_code, [])
+                    for idx, r in enumerate(rows, 1):
+                        log_message += f"          Row {idx}: DeptCode='{r['dept_code_raw']}', Revenue=${r['revenue']:,.2f}\n"
+                    log_message += f"        • Aggregated Revenue: ${revenue_total:,.2f}\n"
                     log_message += f"     ✅ FINAL REVENUE TOTAL: ${revenue_total:,.2f}\n"
-            else:
-                log_message += "  ⚠️  No revenue data available\n"
             
             log_message += f"\n{'='*80}\n"
             print(log_message, end='')
@@ -426,7 +454,8 @@ class AnalysisEngine:
         processed_visits_budget = {name: {} for name in range_names}
         actual_ranges = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
         for range_name in actual_ranges:
-            budget_key = 'budget_week_ending' if range_name == "For The Week Ending (Actual)" else 'budget'
+            # For DMR report: use budget_week_total (full week) for week ending, regular budget for others
+            budget_key = 'budget_week_total' if range_name == "For The Week Ending (Actual)" else 'budget'
             dataframe = data_store[range_name].get(budget_key, pd.DataFrame())
             if not dataframe.empty:
                 code_col = DataUtils.get_col(dataframe, CandidateColumns.departmentCode)
@@ -1024,17 +1053,19 @@ class AnalysisEngine:
                         data_store[name]['payroll'] = stored_procedures_handler.execute_payroll(resort_name, start, end)
                         data_store[name]['salary_payroll'] = stored_procedures_handler.execute_payroll_salary(resort_name, start, end)
                         if name == "For The Week Ending (Actual)":
-                            budget_start, budget_end = date_calculator.week_total_actual()
-                            data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
-                            week_ending_budget_start, week_ending_budget_end = start, end
-                            data_store[name]['budget_week_ending'] = stored_procedures_handler.execute_budget(resort_name, week_ending_budget_start, week_ending_budget_end)
+                            # Full week total budget (Monday-Sunday) for DMR report
+                            budget_week_total_start, budget_week_total_end = date_calculator.week_total_actual()
+                            data_store[name]['budget_week_total'] = stored_procedures_handler.execute_budget(resort_name, budget_week_total_start, budget_week_total_end)
+                            # Week-to-date budget (Monday to report date) for insights comparison
+                            budget_week_to_date_start, budget_week_to_date_end = start, end
+                            data_store[name]['budget_week_to_date'] = stored_procedures_handler.execute_budget(resort_name, budget_week_to_date_start, budget_week_to_date_end)
                         else:
                             budget_start, budget_end = start, end
                             data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
                     else:
                         data_store[name]['payroll_history'] = stored_procedures_handler.execute_payroll_history(resort_name, start, end)
 
-                for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'budget_week_ending', 'payroll_history']:
+                for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'budget_week_total', 'budget_week_to_date', 'payroll_history']:
                     if key not in data_store[name]: data_store[name][key] = pd.DataFrame()
                     if debug and not data_store[name][key].empty:
                         self._export_sp_result(data_store[name][key], name, key.capitalize(), resort_name, debug_directory)
@@ -1048,6 +1079,16 @@ class AnalysisEngine:
                                                  code_to_title_map, debug_log_handle)
         processed_budget, processed_visits_budget = self._process_budget(data_store, range_names_ordered, 
                                                                        code_to_title_map, VISITS_DEPT_CODE_MAPPING)
+
+        # For insights: Use budget_week_to_date (week-to-date) instead of budget_week_total (full week) for "For The Week Ending (Actual)"
+        insights_budget = processed_budget.copy() if generate_insights else None
+        if generate_insights and "For The Week Ending (Actual)" in data_store:
+            budget_week_to_date_df = data_store["For The Week Ending (Actual)"].get('budget_week_to_date', pd.DataFrame())
+            if not budget_week_to_date_df.empty:
+                # Process budget_week_to_date using _process_budget_dataframe directly (returns {dept_code: {Payroll: X, Revenue: Y}})
+                week_to_date_budget_dict = self._process_budget_dataframe(budget_week_to_date_df, code_to_title_map, VISITS_DEPT_CODE_MAPPING)
+                # Replace the week ending budget with week-to-date budget for insights
+                insights_budget["For The Week Ending (Actual)"] = week_to_date_budget_dict
 
         if generate_report:
             file_path = os.path.join(self.output_dir, f"{DataUtils.sanitize_filename(resort_name)}_Report_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
@@ -1096,7 +1137,7 @@ class AnalysisEngine:
                     processed_visits=processed_visits,
                     processed_revenue=processed_revenue,
                     processed_payroll=processed_payroll,
-                    processed_budget=processed_budget,
+                    processed_budget=insights_budget,  # Use insights_budget which has budget_week_to_date for week ending
                     processed_visits_budget=processed_visits_budget,
                     all_locations=locations_set,
                     all_departments=departments_set,
