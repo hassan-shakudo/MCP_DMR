@@ -610,7 +610,7 @@ class AnalysisEngine:
         return pd.DataFrame(rows)
 
     def _get_top_bottom_rows(self, df: pd.DataFrame, n: int = 3) -> Dict[str, Dict[str, pd.DataFrame]]:
-        """Extract top and bottom N rows for each variance column, excluding section headers."""
+        """Extract top and bottom N rows for each variance column, categorized by section (Visits, Payroll, Revenue)."""
         if df is None or df.empty:
             return {}
         
@@ -618,49 +618,77 @@ class AnalysisEngine:
         if not variance_cols:
             return {}
         
-        if 'Row Header' in df.columns:
-            data_rows = df[df['Row Header'].notna() & (df['Row Header'] != '') & 
-                          (~df['Row Header'].isin(['Visits', 'Payroll', 'Revenue']))].copy()
-        else:
-            data_rows = df.copy()
-        
-        if data_rows.empty:
+        if 'Row Header' not in df.columns:
             return {}
         
-        for col in variance_cols:
-            if col in data_rows.columns:
-                data_rows[col] = pd.to_numeric(data_rows[col], errors='coerce')
+        # Get section boundaries
+        section_headers = ['Visits', 'Payroll', 'Revenue']
+        sections = {}
+        current_section = None
+        section_start_idx = None
         
+        for idx, row in df.iterrows():
+            row_header = row.get('Row Header', '')
+            if row_header in section_headers:
+                # Save previous section if exists
+                if current_section and section_start_idx is not None:
+                    sections[current_section] = (section_start_idx, idx)
+                # Start new section
+                current_section = row_header
+                section_start_idx = idx
+            elif current_section and row_header and row_header not in section_headers:
+                # This is a data row in current section
+                pass
+        
+        # Save last section
+        if current_section and section_start_idx is not None:
+            sections[current_section] = (section_start_idx, len(df))
+        
+        # Process each section separately
         result = {}
         for variance_col in variance_cols:
-            if variance_col not in data_rows.columns:
-                continue
-            if data_rows[variance_col].isna().all():
+            if variance_col not in df.columns:
                 continue
             
-            try:
-                sorted_rows_desc = data_rows.sort_values(
-                    by=variance_col, 
-                    ascending=False, 
-                    na_position='last'
-                ).copy()
+            result[variance_col] = {}
+            
+            for section_name, (start_idx, end_idx) in sections.items():
+                # Get rows for this section (excluding the section header row)
+                section_df = df.iloc[start_idx + 1:end_idx].copy()
                 
-                sorted_rows_asc = data_rows.sort_values(
-                    by=variance_col, 
-                    ascending=True, 
-                    na_position='last'
-                ).copy()
+                if section_df.empty:
+                    continue
                 
-                top_rows = sorted_rows_desc.head(n).copy() if len(sorted_rows_desc) >= n else sorted_rows_desc.copy()
-                bottom_rows = sorted_rows_asc.head(n).copy() if len(sorted_rows_asc) >= n else sorted_rows_asc.copy()
+                # Convert variance column to numeric
+                if variance_col in section_df.columns:
+                    section_df[variance_col] = pd.to_numeric(section_df[variance_col], errors='coerce')
                 
-                if not top_rows.empty or not bottom_rows.empty:
-                    result[variance_col] = {
-                        'top': top_rows,
-                        'bottom': bottom_rows
-                    }
-            except (KeyError, ValueError):
-                continue
+                if section_df[variance_col].isna().all():
+                    continue
+                
+                try:
+                    sorted_rows_desc = section_df.sort_values(
+                        by=variance_col, 
+                        ascending=False, 
+                        na_position='last'
+                    ).copy()
+                    
+                    sorted_rows_asc = section_df.sort_values(
+                        by=variance_col, 
+                        ascending=True, 
+                        na_position='last'
+                    ).copy()
+                    
+                    top_rows = sorted_rows_desc.head(n).copy() if len(sorted_rows_desc) >= n else sorted_rows_desc.copy()
+                    bottom_rows = sorted_rows_asc.head(n).copy() if len(sorted_rows_asc) >= n else sorted_rows_asc.copy()
+                    
+                    if not top_rows.empty or not bottom_rows.empty:
+                        result[variance_col][section_name] = {
+                            'top': top_rows,
+                            'bottom': bottom_rows
+                        }
+                except (KeyError, ValueError):
+                    continue
         
         return result
 
@@ -675,35 +703,45 @@ class AnalysisEngine:
             return
         
         has_data = any(
-            not top_bottom['top'].empty or not top_bottom['bottom'].empty
-            for top_bottom in variance_top_bottom_dict.values()
+            any(not section_data['top'].empty or not section_data['bottom'].empty 
+                for section_data in sections_dict.values())
+            for sections_dict in variance_top_bottom_dict.values()
         )
         if not has_data:
             return
         
         print(f"\n{'='*80}")
-        print(f"📊 {insight_type} INSIGHTS - TOP & BOTTOM 3 BY VARIANCE CATEGORY")
+        print(f"📊 {insight_type} INSIGHTS - TOP & BOTTOM 3 BY VARIANCE CATEGORY AND SECTION")
         print(f"{'='*80}")
         
-        for variance_col_name, top_bottom in variance_top_bottom_dict.items():
-            if top_bottom['top'].empty and top_bottom['bottom'].empty:
+        for variance_col_name, sections_dict in variance_top_bottom_dict.items():
+            if not sections_dict:
                 continue
             
             print(f"\n{'─'*80}")
             print(f"🔍 VARIANCE CATEGORY: {variance_col_name}")
             print(f"{'─'*80}")
             
-            print(f"\n📈 TOP 3 (Highest Variance):")
-            if not top_bottom['top'].empty:
-                print(top_bottom['top'].to_string(index=False))
-            else:
-                print("No data available")
-            
-            print(f"\n📉 BOTTOM 3 (Lowest Variance):")
-            if not top_bottom['bottom'].empty:
-                print(top_bottom['bottom'].to_string(index=False))
-            else:
-                print("No data available")
+            for section_name in ['Visits', 'Payroll', 'Revenue']:
+                if section_name not in sections_dict:
+                    continue
+                
+                top_bottom = sections_dict[section_name]
+                if top_bottom['top'].empty and top_bottom['bottom'].empty:
+                    continue
+                
+                print(f"\n📂 SECTION: {section_name}")
+                print(f"\n  📈 TOP 3 (Highest Variance):")
+                if not top_bottom['top'].empty:
+                    print(top_bottom['top'].to_string(index=False))
+                else:
+                    print("  No data available")
+                
+                print(f"\n  📉 BOTTOM 3 (Lowest Variance):")
+                if not top_bottom['bottom'].empty:
+                    print(top_bottom['bottom'].to_string(index=False))
+                else:
+                    print("  No data available")
         
         try:
             useful_file = os.path.join(
@@ -732,13 +770,17 @@ class AnalysisEngine:
             percent_format = workbook.add_format({'border': 1, 'num_format': '0.00"%"'})
             empty_format = workbook.add_format({'border': 1})
             
+            # Get column names from first available section
             column_names = []
-            for top_bottom in variance_top_bottom_dict.values():
-                if not top_bottom['top'].empty:
-                    column_names = list(top_bottom['top'].columns)
-                    break
-                elif not top_bottom['bottom'].empty:
-                    column_names = list(top_bottom['bottom'].columns)
+            for sections_dict in variance_top_bottom_dict.values():
+                for section_name, top_bottom in sections_dict.items():
+                    if not top_bottom['top'].empty:
+                        column_names = list(top_bottom['top'].columns)
+                        break
+                    elif not top_bottom['bottom'].empty:
+                        column_names = list(top_bottom['bottom'].columns)
+                        break
+                if column_names:
                     break
             
             if not column_names:
@@ -750,51 +792,72 @@ class AnalysisEngine:
             
             current_row = 1
             
-            for variance_col_name, top_bottom in variance_top_bottom_dict.items():
-                if top_bottom['top'].empty and top_bottom['bottom'].empty:
+            for variance_col_name, sections_dict in variance_top_bottom_dict.items():
+                if not sections_dict:
                     continue
                 
+                # Variance category header
                 if current_row > 1:
                     current_row += 1
                 
-                section_header_text = f"TOP 3 - {variance_col_name}"
+                variance_header_text = f"VARIANCE CATEGORY: {variance_col_name}"
                 worksheet.merge_range(
                     current_row, 0, current_row, len(column_names) - 1,
-                    section_header_text, section_header_format
+                    variance_header_text, section_header_format
                 )
                 current_row += 1
                 
-                if not top_bottom['top'].empty:
-                    for _, row in top_bottom['top'].iterrows():
-                        self._write_insight_row(
-                            worksheet, row, column_names, current_row,
-                            data_format, percent_format, empty_format
-                        )
-                        current_row += 1
-                else:
-                    for col_idx in range(len(column_names)):
-                        worksheet.write(current_row, col_idx, '', empty_format)
+                # Process each section (Visits, Payroll, Revenue)
+                for section_name in ['Visits', 'Payroll', 'Revenue']:
+                    if section_name not in sections_dict:
+                        continue
+                    
+                    top_bottom = sections_dict[section_name]
+                    if top_bottom['top'].empty and top_bottom['bottom'].empty:
+                        continue
+                    
+                    # Section header - Top 3
+                    section_header_text = f"{section_name} - TOP 3"
+                    worksheet.merge_range(
+                        current_row, 0, current_row, len(column_names) - 1,
+                        section_header_text, section_header_format
+                    )
                     current_row += 1
-                
-                current_row += 1
-                
-                section_header_text = f"BOTTOM 3 - {variance_col_name}"
-                worksheet.merge_range(
-                    current_row, 0, current_row, len(column_names) - 1,
-                    section_header_text, section_header_format
-                )
-                current_row += 1
-                
-                if not top_bottom['bottom'].empty:
-                    for _, row in top_bottom['bottom'].iterrows():
-                        self._write_insight_row(
-                            worksheet, row, column_names, current_row,
-                            data_format, percent_format, empty_format
-                        )
+                    
+                    if not top_bottom['top'].empty:
+                        for _, row in top_bottom['top'].iterrows():
+                            self._write_insight_row(
+                                worksheet, row, column_names, current_row,
+                                data_format, percent_format, empty_format
+                            )
+                            current_row += 1
+                    else:
+                        for col_idx in range(len(column_names)):
+                            worksheet.write(current_row, col_idx, '', empty_format)
                         current_row += 1
-                else:
-                    for col_idx in range(len(column_names)):
-                        worksheet.write(current_row, col_idx, '', empty_format)
+                    
+                    current_row += 1
+                    
+                    # Section header - Bottom 3
+                    section_header_text = f"{section_name} - BOTTOM 3"
+                    worksheet.merge_range(
+                        current_row, 0, current_row, len(column_names) - 1,
+                        section_header_text, section_header_format
+                    )
+                    current_row += 1
+                    
+                    if not top_bottom['bottom'].empty:
+                        for _, row in top_bottom['bottom'].iterrows():
+                            self._write_insight_row(
+                                worksheet, row, column_names, current_row,
+                                data_format, percent_format, empty_format
+                            )
+                            current_row += 1
+                    else:
+                        for col_idx in range(len(column_names)):
+                            worksheet.write(current_row, col_idx, '', empty_format)
+                        current_row += 1
+                    
                     current_row += 1
             
             for col_idx in range(len(column_names)):
