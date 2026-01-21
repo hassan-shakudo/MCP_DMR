@@ -8,7 +8,6 @@ from typing import Dict
 from types import SimpleNamespace
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
 
@@ -16,14 +15,12 @@ class DatabaseConfig:
     """Database connection configuration"""
     
     def __init__(self):
-        # Database credentials - loaded from .env file or environment variables
         self.username = os.getenv('MCP_DB_USERNAME')
         self.password = os.getenv('MCP_DB_PASSWORD')
         self.server = os.getenv('MCP_DB_SERVER')
         self.port = int(os.getenv('MCP_DB_PORT', '1433'))
         self.database_name = os.getenv('MCP_DB_NAME')
         
-        # Validate that required environment variables are set
         if not all([self.username, self.password, self.server, self.database_name]):
             raise ValueError(
                 "Missing required database configuration. "
@@ -31,7 +28,6 @@ class DatabaseConfig:
                 "MCP_DB_SERVER, and MCP_DB_NAME set."
             )
         
-        # ODBC driver configuration
         self.driver = 'ODBC Driver 18 for SQL Server'
         self.encrypt = 'yes'
         self.trust_server_certificate = 'yes'
@@ -51,7 +47,6 @@ class DatabaseConfig:
         )
 
 
-# Stored procedure names
 STORED_PROCEDURES: Dict[str, str] = {
     'Revenue': 'exec Shakudo_DMRGetRevenue @database=?, @group_no=?, @date_ini=?, @date_end=?',
     'PayrollContract': 'exec Shakudo_DMRGetPayroll @resort=?, @date_ini=?, @date_end=?',
@@ -62,7 +57,6 @@ STORED_PROCEDURES: Dict[str, str] = {
     'Weather': 'exec Shakudo_GetSnow @resort=?, @date_ini=?, @date_end=?'
 }
 
-# Resort mapping configuration
 RESORT_MAPPING = [
     {"dbName": "Purgatory", "resortName": "PURGATORY", "groupNum": 46},
     {"dbName": "Purgatory", "resortName": "HESPERUS", "groupNum": 54},
@@ -81,15 +75,10 @@ RESORT_MAPPING = [
 ]
 
 CandidateColumns = SimpleNamespace(
-    # Snow/Weather Data Columns
     snow=['snow_24hrs', 'Snow24Hrs', 'Snow_24hrs'],
     baseDepth=['base_depth', 'BaseDepth', 'Base_Depth'],
-    
-    # Visits Data Columns
     location=['Location', 'location', 'Resort', 'resort'],
     visits=['Visits', 'visits', 'Count', 'count'],
-    
-    # Department Columns (used across Revenue, Payroll, Salary Payroll, History Payroll, Budget)
     departmentCode=[
         'Department', 'department', 
         'DepartmentCode', 'department_code', 
@@ -100,31 +89,19 @@ CandidateColumns = SimpleNamespace(
         'DepartmentTitle', 'department_title', 
         'departmentTitle', 'DeptTitle', 'dept_title'
     ],
-    
-    # Revenue Data Columns
     revenue=['Revenue', 'revenue', 'Amount', 'amount'],
-    
-    # Payroll Data Columns
     payrollStartTime=['start_punchtime', 'StartPunchTime', 'StartTime'],
     payrollEndTime=['end_punchtime', 'EndPunchTime', 'EndTime'],
     payrollRate=['rate', 'Rate', 'HourlyRate'],
     payrollHours=['hours', 'Hours', 'HoursWorked', 'hours_worked'],
     payrollDollarAmount=['dollaramount', 'DollarAmount', 'dollar_amount', 'Dollar_Amount'],
-    
-    # Salary Payroll Data Columns
     salaryRatePerDay=['rate_per_day', 'RatePerDay', 'Rate'],
     salaryTotal=['total', 'Total', 'amount', 'Amount'],
-    
-    # Budget Data Columns
     budgetType=['Type', 'type'],
     budgetAmount=['Amount', 'amount'],
-    
-    # History Payroll Data Columns
     historyTotal=['total', 'Total', 'amount', 'Amount']
 )
 
-# Visits Budget Mapping: department code -> processed location name
-# This mapping is used to match budget department codes with processed visit location names
 VISITS_DEPT_CODE_MAPPING: Dict[str, str] = {
     '99100': 'tickets',
     '99150': 'comp tickets',

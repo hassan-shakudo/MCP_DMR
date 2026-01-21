@@ -87,7 +87,6 @@ def create_connection(username: Optional[str] = None,
     """
     config = DatabaseConfig()
     
-    # Override config with provided parameters
     if username:
         config.username = username
     if password:

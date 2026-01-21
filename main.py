@@ -4,41 +4,37 @@ Mountain Capital Partners - Ski Resort Data Analysis
 """
 
 from datetime import datetime
-from report_generator import ReportGenerator
+from analysis_engine import AnalysisEngine
 from config import RESORT_MAPPING
 
 
-def main():
-    """Generate comprehensive reports for all configured resorts"""
-    
-    # Configuration
+def main(analysis_type: str = "both"):
     OUTPUT_DIR = "reports"
-    
-    # Initialize generator
-    generator = ReportGenerator(OUTPUT_DIR)
-    
-    # Get list of resorts to process
-    # You can filter this list if you only want specific resorts
+    analysisEngine = AnalysisEngine(OUTPUT_DIR)
     resorts = RESORT_MAPPING
+    saved_files = {'reports': [], 'insights': []}
     
-    saved_files = []
-    
-    print(f"Starting batch report generation for {len(resorts)} resorts...")
+    print(f"Starting batch generation (analysis_type='{analysis_type}') for {len(resorts)} resorts...")
     
     for resort_config in resorts:
         try:
-            file_path = generator.generate_comprehensive_report(
+            result = analysisEngine.generate_analysis(
                 resort_config=resort_config,
-                run_date=datetime.now()
+                run_date=datetime.now(),
+                analysis_type=analysis_type
             )
-            if file_path:
-                saved_files.append(file_path)
+            if result.get('report_path'):
+                saved_files['reports'].append(result['report_path'])
+            if result.get('insights_path'):
+                saved_files['insights'].append(result['insights_path'])
         except Exception as e:
-            print(f"❌ Failed to generate report for {resort_config.get('resortName')}: {e}")
+            print(f"❌ Failed to generate analysis for {resort_config.get('resortName')}: {e}")
             import traceback
             traceback.print_exc()
-            
-    print(f"\n✨ Generation complete! {len(saved_files)} reports created.")
+    
+    report_count = len(saved_files['reports'])
+    insights_count = len(saved_files['insights'])
+    print(f"\n✨ Generation complete! {report_count} reports and {insights_count} insights files created.")
     return saved_files
 
 

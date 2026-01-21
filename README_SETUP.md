@@ -3,9 +3,11 @@
 ## Quick Setup
 
 ### Option 1: Automated Setup (Recommended)
+
 Run the setup script:
+
 ```bash
-sudo ./setup.sh
+./setup.sh
 ```
 
 ### Option 2: Manual Setup
@@ -47,6 +49,7 @@ odbcinst -q -d | grep "ODBC Driver 18"
 ## Required Packages
 
 ### System Packages (installed via apt)
+
 - `curl` - For downloading packages
 - `gnupg` - For GPG key management
 - `apt-transport-https` - For HTTPS package repositories
@@ -54,9 +57,8 @@ odbcinst -q -d | grep "ODBC Driver 18"
 - `msodbcsql18` - Microsoft ODBC Driver 18 for SQL Server
 
 ### Python Packages (installed via pip)
+
 - `pandas>=1.5.0` - Data manipulation
 - `pyodbc>=4.0.0` - ODBC database connectivity
 - `xlsxwriter>=3.0.0` - Excel file generation
 - `python-dotenv>=1.0.0` - Environment variable management
-
-
