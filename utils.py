@@ -6,7 +6,7 @@ Mountain Capital Partners - Ski Resort Data Analysis
 import math
 import pandas as pd
 import pyodbc
-from typing import Tuple, Dict, Any, Union, List
+from typing import Tuple, Dict, Any, Union, List, Literal
 from datetime import datetime, timedelta
 
 
@@ -252,3 +252,60 @@ class DateRangeCalculator:
             
         range_start = datetime(season_start_year, 11, 1, 0, 0, 0)
         return range_start, range_end
+
+
+def execute_with_retry(operation_name: str, operation_func, max_retries: int = 3, delay: float = 2.0, logger_func=None):
+    """
+    Execute a database operation with retry logic for deadlocks and transient errors
+
+    Args:
+        operation_name: Descriptive name of the operation (for logging)
+        operation_func: Function to execute (should return the result)
+        max_retries: Maximum number of retry attempts (default: 3)
+        delay: Initial delay between retries in seconds (default: 2.0, uses exponential backoff)
+        logger_func: Optional logging function (signature: logger_func(message, level))
+
+    Returns:
+        Result from operation_func
+
+    Raises:
+        Exception: Re-raises the exception if all retries are exhausted
+    """
+    import time
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            return operation_func()
+        except Exception as e:
+            error_msg = str(e).lower()
+            is_retryable = any(keyword in error_msg for keyword in ['deadlock', 'timeout', 'connection', 'lock'])
+
+            if attempt < max_retries and is_retryable:
+                if logger_func:
+                    logger_func(f"Retry {attempt}/{max_retries} for {operation_name}: {str(e)}", "WARNING")
+                time.sleep(delay * attempt)  # Exponential backoff
+            else:
+                if logger_func:
+                    logger_func(f"Failed {operation_name} after {attempt} attempts: {str(e)}", "ERROR")
+                raise
+
+
+LogLevel = Literal["INFO", "SUCCESS", "ERROR", "WARNING"]
+
+
+def log(message: str, level: LogLevel = "INFO"):
+    """
+    Simple logger with timestamp and severity level icons
+
+    Args:
+        message: Log message to display
+        level: Severity level (INFO, SUCCESS, ERROR, WARNING)
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    prefix = {
+        "INFO": "ℹ️",
+        "SUCCESS": "✅",
+        "ERROR": "❌",
+        "WARNING": "⚠️"
+    }.get(level, "ℹ️")
+    print(f"[{timestamp}] {prefix} {message}")

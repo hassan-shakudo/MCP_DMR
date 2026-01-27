@@ -11,8 +11,9 @@ from typing import Dict, Any, Union, List, Tuple, Set, Optional
 
 from db_connection import DatabaseConnection
 from stored_procedures import StoredProcedures
-from utils import DateRangeCalculator, DataUtils
+from utils import DateRangeCalculator, DataUtils, execute_with_retry, log
 from config import CandidateColumns, VISITS_DEPT_CODE_MAPPING
+from webhook_client import send_to_n8n_webhooks
 
 
 class AnalysisEngine:
@@ -22,7 +23,6 @@ class AnalysisEngine:
         self.output_dir = output_dir
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-            print(f"✓ Created output directory: {output_dir}")
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
         self.insights_dir = os.path.join(current_file_dir, "insights")
         if not os.path.exists(self.insights_dir):
@@ -109,7 +109,6 @@ class AnalysisEngine:
                 processed_revenue[range_name] = {}
             else:
                 code_col = DataUtils.get_col(dataframe, CandidateColumns.departmentCode) or 'department'
-                title_col = DataUtils.get_col(dataframe, CandidateColumns.departmentTitle) or 'DepartmentTitle'
                 revenue_col = DataUtils.get_col(dataframe, CandidateColumns.revenue) or 'revenue'
                 if not revenue_col:
                     numeric_cols = dataframe.select_dtypes(include=['number']).columns
@@ -145,7 +144,6 @@ class AnalysisEngine:
                     log_message += f"     ✅ FINAL REVENUE TOTAL: ${revenue_total:,.2f}\n"
             
             log_message += f"\n{'='*80}\n"
-            print(log_message, end='')
             if debug_log_file:
                 debug_log_file.write(log_message)
                 debug_log_file.flush()
@@ -281,7 +279,6 @@ class AnalysisEngine:
                     all_departments.add(dept_code)
 
             log_message += f"\n{'='*80}\n"
-            print(log_message, end='')
             if debug_log_file:
                 debug_log_file.write(log_message)
                 debug_log_file.flush()
@@ -376,7 +373,6 @@ class AnalysisEngine:
             processed_payroll[dept_code] = final_wage
             log_message += f"     ✅ FINAL PAYROLL TOTAL: ${final_wage:,.2f}\n"
         log_message += f"\n{'='*80}\n"
-        print(log_message, end='')
         if debug_log_file:
             debug_log_file.write(log_message)
             debug_log_file.flush()
@@ -394,7 +390,6 @@ class AnalysisEngine:
         if history_df.empty:
             log_message += "  ⚠️  No payroll history data available\n"
             log_message += f"\n{'='*80}\n"
-            print(log_message, end='')
             if debug_log_file:
                 debug_log_file.write(log_message)
                 debug_log_file.flush()
@@ -415,7 +410,6 @@ class AnalysisEngine:
             log_message += f"        • Historical Total: ${history_total:,.2f}\n"
             log_message += f"     ✅ FINAL PAYROLL TOTAL: ${history_total:,.2f}\n"
         log_message += f"\n{'='*80}\n"
-        print(log_message, end='')
         if debug_log_file:
             debug_log_file.write(log_message)
             debug_log_file.flush()
@@ -709,40 +703,7 @@ class AnalysisEngine:
         )
         if not has_data:
             return
-        
-        print(f"\n{'='*80}")
-        print(f"📊 {insight_type} INSIGHTS - TOP & BOTTOM 3 BY VARIANCE CATEGORY AND SECTION")
-        print(f"{'='*80}")
-        
-        for variance_col_name, sections_dict in variance_top_bottom_dict.items():
-            if not sections_dict:
-                continue
-            
-            print(f"\n{'─'*80}")
-            print(f"🔍 VARIANCE CATEGORY: {variance_col_name}")
-            print(f"{'─'*80}")
-            
-            for section_name in ['Visits', 'Payroll', 'Revenue']:
-                if section_name not in sections_dict:
-                    continue
-                
-                top_bottom = sections_dict[section_name]
-                if top_bottom['top'].empty and top_bottom['bottom'].empty:
-                    continue
-                
-                print(f"\n📂 SECTION: {section_name}")
-                print(f"\n  📈 TOP 3 (Highest Variance):")
-                if not top_bottom['top'].empty:
-                    print(top_bottom['top'].to_string(index=False))
-                else:
-                    print("  No data available")
-                
-                print(f"\n  📉 BOTTOM 3 (Lowest Variance):")
-                if not top_bottom['bottom'].empty:
-                    print(top_bottom['bottom'].to_string(index=False))
-                else:
-                    print("  No data available")
-        
+
         try:
             useful_file = os.path.join(
                 self.output_dir, 
@@ -865,9 +826,8 @@ class AnalysisEngine:
             
             worksheet.freeze_panes(1, 0)
             workbook.close()
-            print(f"\n✓ Useful insights exported: {useful_file}")
         except Exception as e:
-            print(f"⚠️  Warning: Failed to export insights: {e}")
+            pass  # Silently fail
     
     def _write_insight_row(self, worksheet, row: pd.Series, column_names: List[str], 
                           row_idx: int, data_format, percent_format, empty_format):
@@ -949,7 +909,6 @@ class AnalysisEngine:
         worksheet.freeze_panes(1, 2)
             
         workbook.close()
-        print(f"✓ DMR Insights saved: {file_path}")
         return file_path
 
     def _write_snow_section(self, worksheet, row, columns, processed_snow, snow_format, row_header_format):
@@ -1064,16 +1023,196 @@ class AnalysisEngine:
                 worksheet.write(row, i + 1, final_value, percent_format if "PR %" in label else data_format)
             row += 1
 
-    def generate_analysis(self, resort_config: Dict, run_date: Union[str, datetime] = None, 
+    def _build_report_json(self, resort_name, report_date, ranges, date_calculator, column_structure,
+                          actual_range_names, processed_snow, processed_visits, processed_visits_budget,
+                          processed_revenue, processed_payroll, processed_budget, locations_set,
+                          departments_set, code_to_title_map):
+        """Build JSON structure matching Excel report layout"""
+
+        # Build header row with date ranges
+        headers = [{"name": "Row Header", "display": ""}]
+        for col_name in column_structure:
+            if col_name.endswith(" (Budget)"):
+                start, end = (date_calculator.week_total_actual() if col_name == "Week Total (Actual) (Budget)"
+                             else ranges[self._get_budget_range_name(col_name)])
+            else:
+                start, end = ranges[col_name]
+            headers.append({
+                "name": col_name,
+                "display": f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}"
+            })
+
+        rows = []
+
+        # Title row
+        title_text = f"{resort_name} Resort - Daily Management Report - As of {report_date.strftime('%A')} - {report_date.strftime('%d %B, %Y').lstrip('0')}"
+        rows.append({
+            "type": "title",
+            "row_header": title_text,
+            "values": [""] * len(column_structure)
+        })
+
+        # Snow section
+        snow_24hrs_row = {"type": "data", "row_header": "Snow 24hrs", "values": []}
+        for col_name in column_structure:
+            if not col_name.endswith(" (Budget)"):
+                value = DataUtils.normalize_value(processed_snow[col_name]['snow_24hrs'])
+                snow_24hrs_row["values"].append(value)
+            else:
+                snow_24hrs_row["values"].append(None)
+        rows.append(snow_24hrs_row)
+
+        base_depth_row = {"type": "data", "row_header": "Base Depth", "values": []}
+        for col_name in column_structure:
+            if not col_name.endswith(" (Budget)"):
+                value = DataUtils.normalize_value(processed_snow[col_name]['base_depth'])
+                base_depth_row["values"].append(value)
+            else:
+                base_depth_row["values"].append(None)
+        rows.append(base_depth_row)
+
+        # Empty row
+        rows.append({"type": "empty", "row_header": "", "values": [""] * len(column_structure)})
+
+        # Visits section
+        rows.append({"type": "section_header", "row_header": "VISITS", "values": [""] * len(column_structure)})
+
+        for location in sorted(list(locations_set)):
+            location_row = {"type": "data", "row_header": location, "values": []}
+            for col_name in column_structure:
+                if col_name.endswith(" (Budget)"):
+                    range_key = self._get_budget_range_name(col_name)
+                    loc_key = DataUtils.process_location_name(location, resort_name)
+                    value = processed_budget.get(range_key, {}).get(loc_key, 0)
+                else:
+                    value = processed_visits[col_name].get(location, 0)
+                location_row["values"].append(DataUtils.normalize_value(value))
+            rows.append(location_row)
+
+        # Total Tickets row
+        total_tickets_row = {"type": "total", "row_header": "Total Tickets", "values": []}
+        for col_name in column_structure:
+            if col_name.endswith(" (Budget)"):
+                range_key = self._get_budget_range_name(col_name)
+                total_val = sum(processed_budget.get(range_key, {}).values())
+            else:
+                total_val = sum(processed_visits[col_name].values())
+            total_tickets_row["values"].append(DataUtils.normalize_value(total_val))
+        rows.append(total_tickets_row)
+
+        # Empty row
+        rows.append({"type": "empty", "row_header": "", "values": [""] * len(column_structure)})
+
+        # Financials section
+        rows.append({"type": "section_header", "row_header": "FINANCIALS", "values": [""] * len(column_structure)})
+
+        for dept_code in sorted(list(departments_set)):
+            trimmed_code = DataUtils.trim_dept_code(dept_code)
+            title = code_to_title_map.get(trimmed_code, trimmed_code)
+
+            # Revenue row
+            revenue_row = {"type": "data", "row_header": f"{title} - Revenue", "values": []}
+            for col_name in column_structure:
+                if col_name.endswith(" (Budget)"):
+                    range_key = self._get_budget_range_name(col_name)
+                    value = processed_budget.get(range_key, {}).get(trimmed_code, {}).get('Revenue', 0)
+                else:
+                    value = processed_revenue[col_name].get(trimmed_code, 0)
+                revenue_row["values"].append(DataUtils.normalize_value(value))
+            rows.append(revenue_row)
+
+            # Payroll row
+            payroll_row = {"type": "data", "row_header": f"{title} - Payroll", "values": []}
+            for col_name in column_structure:
+                if col_name.endswith(" (Budget)"):
+                    range_key = self._get_budget_range_name(col_name)
+                    value = processed_budget.get(range_key, {}).get(trimmed_code, {}).get('Payroll', 0)
+                else:
+                    value = processed_payroll[col_name].get(trimmed_code, 0)
+                payroll_row["values"].append(DataUtils.normalize_value(value))
+            rows.append(payroll_row)
+
+        # Empty row
+        rows.append({"type": "empty", "row_header": "", "values": [""] * len(column_structure)})
+
+        # Totals section
+        total_labels = ["Total Revenue", "Total Payroll", "Contribution", "PR %"]
+        for label in total_labels:
+            total_row = {"type": "total", "row_header": label, "values": []}
+            for col_name in column_structure:
+                if col_name.endswith(" (Budget)"):
+                    range_key = self._get_budget_range_name(col_name)
+                    if label == "Total Revenue":
+                        final_value = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
+                                         for dept in departments_set)
+                    elif label == "Total Payroll":
+                        final_value = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
+                                         for dept in departments_set)
+                    elif label == "Contribution":
+                        revenue_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
+                                           for dept in departments_set)
+                        payroll_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
+                                           for dept in departments_set)
+                        final_value = revenue_total - payroll_total
+                    else:  # PR %
+                        revenue_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
+                                           for dept in departments_set)
+                        payroll_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
+                                           for dept in departments_set)
+                        final_value = (abs(payroll_total) / abs(revenue_total) * 100) if revenue_total != 0 else 0
+                else:
+                    revenue_total = sum(processed_revenue[col_name].get(DataUtils.trim_dept_code(dept), 0)
+                                       for dept in departments_set)
+                    payroll_total = sum(processed_payroll[col_name].get(DataUtils.trim_dept_code(dept), 0)
+                                       for dept in departments_set)
+
+                    if label == "Total Revenue":
+                        final_value = revenue_total
+                    elif label == "Total Payroll":
+                        final_value = payroll_total
+                    elif label == "PR %":
+                        final_value = (abs(payroll_total) / abs(revenue_total) * 100) if revenue_total != 0 else 0
+                    else:
+                        final_value = revenue_total - payroll_total
+
+                total_row["values"].append(DataUtils.normalize_value(final_value))
+            rows.append(total_row)
+
+        return {
+            "resort_name": resort_name,
+            "report_date": report_date.strftime("%Y-%m-%d"),
+            "generated_at": datetime.now().isoformat(),
+            "headers": headers,
+            "rows": rows
+        }
+
+    def generate_analysis(self, resort_config: Dict = None, run_date: Union[str, datetime] = None,
                          debug: bool = False, file_name_postfix: str = None,
-                         analysis_type: str = "both") -> Dict[str, str]:
-        result = {'report_path': None, 'insights_path': None}
+                         analysis_type: str = "rep") -> Dict[str, str]:
         
+        result = {'report_path': None, 'insights_path': None}
         analysis_type = analysis_type.lower()
         generate_report = analysis_type in ["rep", "both"]
         generate_insights = analysis_type in ["ins", "both"]
-        
         current_now = datetime.now()
+
+        # Track if resort_config came from environment variables
+        resort_config_from_env = False
+        if resort_config is None:
+            resort_config_from_env = True
+            resort_config = {
+                'resortName': os.getenv('RESORT_NAME'),
+                'dbName': os.getenv('DB_NAME'),
+                'groupNum': int(os.getenv('GROUP_NUM', '-1'))
+            }
+
+            if run_date is None:
+                env_run_date = os.getenv('RUN_DATE')
+                if env_run_date:
+                    run_date = datetime.strptime(env_run_date, "%m/%d/%Y")
+                else:
+                    run_date = current_now - timedelta(days=1)
+
         if run_date is None:
             report_date, is_current = current_now, True
         elif isinstance(run_date, str):
@@ -1098,134 +1237,223 @@ class AnalysisEngine:
             if not os.path.exists(debug_directory): os.makedirs(debug_directory)
             debug_log_handle = open(os.path.join(debug_directory, "DebugLogs.txt"), 'w', encoding='utf-8')
 
+        log(f"Generating report for {resort_name} for {report_date.strftime('%Y-%m-%d')}")
+
         data_store = {name: {} for name in range_names_ordered}
         actual_range_names = ["For The Day (Actual)", "For The Week Ending (Actual)", "Month to Date (Actual)", "For Winter Ending (Actual)"]
-        
-        with DatabaseConnection() as conn:
-            stored_procedures_handler = StoredProcedures(conn)
-            for name in range_names_ordered:
-                start, end = ranges[name]
-                print(f"   ⏳ Fetching {name} ({start.date()} to {end.date()})...")
-                
-                data_store[name]['revenue'] = stored_procedures_handler.execute_revenue(db_name, group_num, start, end)
-                data_store[name]['visits'] = stored_procedures_handler.execute_visits(resort_name, start, end)
-                data_store[name]['snow'] = stored_procedures_handler.execute_weather(resort_name, start, end)
-                
-                if not is_current:
-                    if name in actual_range_names:
-                        data_store[name]['payroll'] = stored_procedures_handler.execute_payroll(resort_name, start, end)
-                        data_store[name]['salary_payroll'] = stored_procedures_handler.execute_payroll_salary(resort_name, start, end)
-                        if name == "For The Week Ending (Actual)":
-                            # Full week total budget (Monday-Sunday) for DMR report
-                            budget_week_total_start, budget_week_total_end = date_calculator.week_total_actual()
-                            data_store[name]['budget_week_total'] = stored_procedures_handler.execute_budget(resort_name, budget_week_total_start, budget_week_total_end)
-                            # Week-to-date budget (Monday to report date) for insights comparison
-                            budget_week_to_date_start, budget_week_to_date_end = start, end
-                            data_store[name]['budget_week_to_date'] = stored_procedures_handler.execute_budget(resort_name, budget_week_to_date_start, budget_week_to_date_end)
-                        else:
-                            budget_start, budget_end = start, end
-                            data_store[name]['budget'] = stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end)
-                    else:
-                        data_store[name]['payroll_history'] = stored_procedures_handler.execute_payroll_history(resort_name, start, end)
 
-                for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'budget_week_total', 'budget_week_to_date', 'payroll_history']:
-                    if key not in data_store[name]: data_store[name][key] = pd.DataFrame()
-                    if debug and not data_store[name][key].empty:
-                        self._export_sp_result(data_store[name][key], name, key.capitalize(), resort_name, debug_directory)
+        try:
+            with DatabaseConnection() as conn:
+                stored_procedures_handler = StoredProcedures(conn)
+                for name in range_names_ordered:
+                    start, end = ranges[name]
+                    log(f"Fetching data for {name} ({start.date()} to {end.date()})")
 
-        locations_set, departments_set, code_to_title_map = set(), set(), {}
-        processed_snow = self._process_snow(data_store, range_names_ordered)
-        processed_visits = self._process_visits(data_store, range_names_ordered, locations_set)
-        processed_revenue = self._process_revenue(data_store, range_names_ordered, departments_set, code_to_title_map, debug_log_handle)
-        processed_payroll = self._process_payroll(data_store, range_names_ordered, is_current, 
-                                                 actual_range_names, processed_revenue, departments_set, 
-                                                 code_to_title_map, debug_log_handle)
-        processed_budget, processed_visits_budget = self._process_budget(data_store, range_names_ordered, 
-                                                                       code_to_title_map, VISITS_DEPT_CODE_MAPPING)
-
-        # For insights: Use budget_week_to_date (week-to-date) instead of budget_week_total (full week) for "For The Week Ending (Actual)"
-        insights_budget = processed_budget.copy() if generate_insights else None
-        if generate_insights and "For The Week Ending (Actual)" in data_store:
-            budget_week_to_date_df = data_store["For The Week Ending (Actual)"].get('budget_week_to_date', pd.DataFrame())
-            if not budget_week_to_date_df.empty:
-                # Process budget_week_to_date using _process_budget_dataframe directly (returns {dept_code: {Payroll: X, Revenue: Y}})
-                week_to_date_budget_dict = self._process_budget_dataframe(budget_week_to_date_df, code_to_title_map, VISITS_DEPT_CODE_MAPPING)
-                # Replace the week ending budget with week-to-date budget for insights
-                insights_budget["For The Week Ending (Actual)"] = week_to_date_budget_dict
-
-        if generate_report:
-            file_path = os.path.join(self.output_dir, f"{DataUtils.sanitize_filename(resort_name)}_Report_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
-            workbook = xlsxwriter.Workbook(file_path, {'nan_inf_to_errors': True})
-            worksheet = workbook.add_worksheet("Report")
-            
-            header_format = workbook.add_format({'bold':True,'align':'center','bg_color':'#D3D3D3','border':1,'text_wrap':True})
-            row_header_format = workbook.add_format({'bold':True,'border':1})
-            data_format = workbook.add_format({'border':1, 'num_format':'#,##0.00'})
-            snow_format = workbook.add_format({'border':1, 'num_format':'0.0'})
-            percent_format = workbook.add_format({'border':1, 'num_format':'0"%"'})
-            
-            day_actual_start = ranges["For The Day (Actual)"][0]
-            title_text = f"{resort_name} Resort\nDaily Management Report\nAs of {day_actual_start.strftime('%A')} - {day_actual_start.strftime('%d %B, %Y').lstrip('0')}"
-            worksheet.write(0, 0, title_text, header_format)
-            
-            column_structure = []
-            for name in range_names_ordered:
-                column_structure.append(name)
-                if name in actual_range_names:
-                    column_structure.append("Week Total (Actual) (Budget)" if name == "For The Week Ending (Actual)" else f"{name} (Budget)")
-            
-            for i, col_name in enumerate(column_structure):
-                if col_name.endswith(" (Budget)"):
-                    start, end = (date_calculator.week_total_actual() if col_name == "Week Total (Actual) (Budget)" else ranges[self._get_budget_range_name(col_name)])
-                else:
-                    start, end = ranges[col_name]
-                worksheet.write(0, i + 1, f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}", header_format)
-                worksheet.set_column(i + 1, i + 1, 18)
-            
-            worksheet.set_column(0, 0, 30)
-            worksheet.freeze_panes(1, 1)
-            
-            current_row = self._write_snow_section(worksheet, 1, column_structure, processed_snow, snow_format, row_header_format)
-            current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, resort_name, row_header_format, data_format, header_format)
-            current_row = self._write_financials_section(worksheet, current_row, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), code_to_title_map, row_header_format, data_format, header_format, percent_format)
-            self._write_totals_section(worksheet, current_row + 1, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), data_format, header_format, percent_format)
-            
-            workbook.close()
-            print(f"✓ Report saved: {file_path}")
-            result['report_path'] = file_path
-
-        if generate_insights:
-            try:
-                insights_df = self._generate_insights_dataframe(
-                    processed_visits=processed_visits,
-                    processed_revenue=processed_revenue,
-                    processed_payroll=processed_payroll,
-                    processed_budget=insights_budget,  # Use insights_budget which has budget_week_to_date for week ending
-                    processed_visits_budget=processed_visits_budget,
-                    all_locations=locations_set,
-                    all_departments=departments_set,
-                    department_to_title=code_to_title_map,
-                    resort_name=resort_name
-                )
-                if insights_df is not None and not insights_df.empty:
-                    insights_path = self._export_insights_to_excel(
-                        insights_dataframe=insights_df,
-                        resort_name=resort_name,
-                        report_date_string=report_date_string,
-                        file_name_postfix=file_name_postfix
+                    data_store[name]['revenue'] = execute_with_retry(
+                        f"Revenue data for {name}",
+                        lambda: stored_procedures_handler.execute_revenue(db_name, group_num, start, end),
+                        logger_func=log
                     )
-                    if insights_path:
-                        result['insights_path'] = insights_path
-                        self._log_top_bottom_insights(insights_df, "DMR", resort_name, report_date_string, file_name_postfix)
-            except Exception as e:
-                print(f"⚠️  Warning: Failed to generate DMR insights: {e}")
-                import traceback
-                traceback.print_exc()
+                    data_store[name]['visits'] = execute_with_retry(
+                        f"Visits data for {name}",
+                        lambda: stored_procedures_handler.execute_visits(resort_name, start, end),
+                        logger_func=log
+                    )
+                    data_store[name]['snow'] = execute_with_retry(
+                        f"Weather data for {name}",
+                        lambda: stored_procedures_handler.execute_weather(resort_name, start, end),
+                        logger_func=log
+                    )
+
+                    if not is_current:
+                        if name in actual_range_names:
+                            data_store[name]['payroll'] = execute_with_retry(
+                                f"Payroll data for {name}",
+                                lambda: stored_procedures_handler.execute_payroll(resort_name, start, end),
+                                logger_func=log
+                            )
+                            data_store[name]['salary_payroll'] = execute_with_retry(
+                                f"Salary payroll data for {name}",
+                                lambda: stored_procedures_handler.execute_payroll_salary(resort_name, start, end),
+                                logger_func=log
+                            )
+                            if name == "For The Week Ending (Actual)":
+                                # Full week total budget (Monday-Sunday) for DMR report
+                                budget_week_total_start, budget_week_total_end = date_calculator.week_total_actual()
+                                data_store[name]['budget_week_total'] = execute_with_retry(
+                                    f"Budget week total for {name}",
+                                    lambda: stored_procedures_handler.execute_budget(resort_name, budget_week_total_start, budget_week_total_end),
+                                    logger_func=log
+                                )
+                                # Week-to-date budget (Monday to report date) for insights comparison
+                                budget_week_to_date_start, budget_week_to_date_end = start, end
+                                data_store[name]['budget_week_to_date'] = execute_with_retry(
+                                    f"Budget week to date for {name}",
+                                    lambda: stored_procedures_handler.execute_budget(resort_name, budget_week_to_date_start, budget_week_to_date_end),
+                                    logger_func=log
+                                )
+                            else:
+                                budget_start, budget_end = start, end
+                                data_store[name]['budget'] = execute_with_retry(
+                                    f"Budget data for {name}",
+                                    lambda: stored_procedures_handler.execute_budget(resort_name, budget_start, budget_end),
+                                    logger_func=log
+                                )
+                        else:
+                            data_store[name]['payroll_history'] = execute_with_retry(
+                                f"Payroll history for {name}",
+                                lambda: stored_procedures_handler.execute_payroll_history(resort_name, start, end),
+                                logger_func=log
+                            )
+
+                    for key in ['revenue', 'visits', 'snow', 'payroll', 'salary_payroll', 'budget', 'budget_week_total', 'budget_week_to_date', 'payroll_history']:
+                        if key not in data_store[name]: data_store[name][key] = pd.DataFrame()
+                        if debug and not data_store[name][key].empty:
+                            self._export_sp_result(data_store[name][key], name, key.capitalize(), resort_name, debug_directory)
+
+            locations_set, departments_set, code_to_title_map = set(), set(), {}
+            processed_snow = self._process_snow(data_store, range_names_ordered)
+            processed_visits = self._process_visits(data_store, range_names_ordered, locations_set)
+            processed_revenue = self._process_revenue(data_store, range_names_ordered, departments_set, code_to_title_map, debug_log_handle)
+            processed_payroll = self._process_payroll(data_store, range_names_ordered, is_current,
+                                                     actual_range_names, processed_revenue, departments_set,
+                                                     code_to_title_map, debug_log_handle)
+            processed_budget, processed_visits_budget = self._process_budget(data_store, range_names_ordered,
+                                                                           code_to_title_map, VISITS_DEPT_CODE_MAPPING)
+
+            # For insights: Use budget_week_to_date (week-to-date) instead of budget_week_total (full week) for "For The Week Ending (Actual)"
+            insights_budget = processed_budget.copy() if generate_insights else None
+            if generate_insights and "For The Week Ending (Actual)" in data_store:
+                budget_week_to_date_df = data_store["For The Week Ending (Actual)"].get('budget_week_to_date', pd.DataFrame())
+                if not budget_week_to_date_df.empty:
+                    # Process budget_week_to_date using _process_budget_dataframe directly (returns {dept_code: {Payroll: X, Revenue: Y}})
+                    week_to_date_budget_dict = self._process_budget_dataframe(budget_week_to_date_df, code_to_title_map, VISITS_DEPT_CODE_MAPPING)
+                    # Replace the week ending budget with week-to-date budget for insights
+                    insights_budget["For The Week Ending (Actual)"] = week_to_date_budget_dict
+
+            if generate_report:
+                # Build column structure (same for Excel and JSON)
+                column_structure = []
+                for name in range_names_ordered:
+                    column_structure.append(name)
+                    if name in actual_range_names:
+                        column_structure.append("Week Total (Actual) (Budget)" if name == "For The Week Ending (Actual)" else f"{name} (Budget)")
+
+                # If config came from env, return JSON instead of Excel
+                if resort_config_from_env:
+                    day_actual_start = ranges["For The Day (Actual)"][0]
+                    report_json = self._build_report_json(
+                        resort_name=resort_name,
+                        report_date=day_actual_start,
+                        ranges=ranges,
+                        date_calculator=date_calculator,
+                        column_structure=column_structure,
+                        actual_range_names=actual_range_names,
+                        processed_snow=processed_snow,
+                        processed_visits=processed_visits,
+                        processed_visits_budget=processed_visits_budget,
+                        processed_revenue=processed_revenue,
+                        processed_payroll=processed_payroll,
+                        processed_budget=processed_budget,
+                        locations_set=locations_set,
+                        departments_set=departments_set,
+                        code_to_title_map=code_to_title_map
+                    )
+                    result['report_json'] = report_json
+
+                    # Send to N8N webhooks
+                    webhook_results = send_to_n8n_webhooks(resort_name, report_json)
+                    result['webhook_results'] = webhook_results
+                else:
+                    # Generate Excel file (existing logic)
+                    file_path = os.path.join(self.output_dir, f"{DataUtils.sanitize_filename(resort_name)}_Report_{report_date_string}{f'-{file_name_postfix}' if file_name_postfix else ''}.xlsx")
+                    workbook = xlsxwriter.Workbook(file_path, {'nan_inf_to_errors': True})
+                    worksheet = workbook.add_worksheet("Report")
+
+                    header_format = workbook.add_format({'bold':True,'align':'center','bg_color':'#D3D3D3','border':1,'text_wrap':True})
+                    row_header_format = workbook.add_format({'bold':True,'border':1})
+                    data_format = workbook.add_format({'border':1, 'num_format':'#,##0.00'})
+                    snow_format = workbook.add_format({'border':1, 'num_format':'0.0'})
+                    percent_format = workbook.add_format({'border':1, 'num_format':'0"%"'})
+
+                    day_actual_start = ranges["For The Day (Actual)"][0]
+                    title_text = f"{resort_name} Resort\nDaily Management Report\nAs of {day_actual_start.strftime('%A')} - {day_actual_start.strftime('%d %B, %Y').lstrip('0')}"
+                    worksheet.write(0, 0, title_text, header_format)
+
+                    for i, col_name in enumerate(column_structure):
+                        if col_name.endswith(" (Budget)"):
+                            start, end = (date_calculator.week_total_actual() if col_name == "Week Total (Actual) (Budget)" else ranges[self._get_budget_range_name(col_name)])
+                        else:
+                            start, end = ranges[col_name]
+                        worksheet.write(0, i + 1, f"{col_name}\n{start.strftime('%b %d')} - {end.strftime('%b %d')}", header_format)
+                        worksheet.set_column(i + 1, i + 1, 18)
+
+                    worksheet.set_column(0, 0, 30)
+                    worksheet.freeze_panes(1, 1)
+
+                    current_row = self._write_snow_section(worksheet, 1, column_structure, processed_snow, snow_format, row_header_format)
+                    current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, resort_name, row_header_format, data_format, header_format)
+                    current_row = self._write_financials_section(worksheet, current_row, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), code_to_title_map, row_header_format, data_format, header_format, percent_format)
+                    self._write_totals_section(worksheet, current_row + 1, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), data_format, header_format, percent_format)
+
+                    workbook.close()
+                    result['report_path'] = file_path
+
+            if generate_insights:
+                try:
+                    insights_df = self._generate_insights_dataframe(
+                        processed_visits=processed_visits,
+                        processed_revenue=processed_revenue,
+                        processed_payroll=processed_payroll,
+                        processed_budget=insights_budget,  # Use insights_budget which has budget_week_to_date for week ending
+                        processed_visits_budget=processed_visits_budget,
+                        all_locations=locations_set,
+                        all_departments=departments_set,
+                        department_to_title=code_to_title_map,
+                        resort_name=resort_name
+                    )
+                    if insights_df is not None and not insights_df.empty:
+                        insights_path = self._export_insights_to_excel(
+                            insights_dataframe=insights_df,
+                            resort_name=resort_name,
+                            report_date_string=report_date_string,
+                            file_name_postfix=file_name_postfix
+                        )
+                        if insights_path:
+                            result['insights_path'] = insights_path
+                            self._log_top_bottom_insights(insights_df, "DMR", resort_name, report_date_string, file_name_postfix)
+                except Exception as e:
+                    log(f"Failed to generate DMR insights: {e}", "WARNING")
+
+            log(f"Report processing completed successfully for {resort_name}", "SUCCESS")
+
+        except Exception as e:
+            log(f"Report generation failed for {resort_name}: {str(e)}", "ERROR")
+
+            # Send error to N8N webhook if config was from env
+            if resort_config_from_env:
+                error_response = {
+                    "status": "error",
+                    "error": str(e),
+                    "resort_name": resort_name,
+                    "report_date": report_date.strftime("%Y-%m-%d"),
+                    "timestamp": datetime.now().isoformat()
+                }
+                send_to_n8n_webhooks(resort_name, error_response)
+
+            result['error'] = str(e)
+
+            if debug_log_handle:
+                debug_log_handle.write(f"\n\nERROR: {str(e)}\n")
+                debug_log_handle.close()
+
+            # Re-raise the exception so caller knows it failed
+            raise
 
         if debug_log_handle: debug_log_handle.close()
         return result
 
-    def generate_comprehensive_report(self, resort_config: Dict, run_date: Union[str, datetime] = None, 
+    def generate_comprehensive_report(self, resort_config: Dict = None, run_date: Union[str, datetime] = None,
                                     debug: bool = False, file_name_postfix: str = None) -> str:
         result = self.generate_analysis(
             resort_config=resort_config,
@@ -1296,7 +1524,6 @@ class AnalysisEngine:
         }
         with DatabaseConnection() as conn:
             stored_procedures_handler = StoredProcedures(conn)
-            print(f"   ⏳ Fetching {date_label} data ({start.date()} to {end.date()})...")
             data['revenue'] = stored_procedures_handler.execute_revenue(db_name, group_num, start, end)
             data['visits'] = stored_procedures_handler.execute_visits(resort_name, start, end)
             data['budget'] = stored_procedures_handler.execute_budget(resort_name, start, end)
@@ -1475,14 +1702,11 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
 """
             debug_log_handle.write(header)
             debug_log_handle.flush()
-            print(header, end='')
-        print(f"Fetching data for Comparison Date: {comparison_date.strftime('%Y-%m-%d')}")
         comparison_data = self._fetch_single_day_data(
             resort_config, comparison_date, comparison_is_within_year,
             is_current_date=comparison_is_current, debug=debug,
             debug_directory=debug_directory, date_label="Comparison"
         )
-        print(f"Fetching data for Anchor Date: {anchor_date.strftime('%Y-%m-%d')}")
         anchor_data = self._fetch_single_day_data(
             resort_config, anchor_date, anchor_is_within_year,
             is_current_date=anchor_is_current, debug=debug,
@@ -1568,11 +1792,9 @@ Anchor Date Payroll Method: {'Actual Ranges' if anchor_is_within_year else 'Prio
             with pd.ExcelWriter(insights_file, engine='xlsxwriter') as writer:
                 visit_insights.to_excel(writer, sheet_name='Visit Analytics', index=False)
                 financial_insights.to_excel(writer, sheet_name='Department Analytics', index=False)
-            print(f"✓ Comparison insights exported: {insights_file}")
             if debug_log_handle:
                 debug_log_handle.write(f"\n{'='*80}\nInsight generation complete!\n{'='*80}\n")
                 debug_log_handle.close()
-                print(f"✓ Debug log saved: {os.path.join(debug_directory, 'debugLog.txt')}")
         
         if not visit_insights.empty:
             self._log_top_bottom_insights(visit_insights, "Comparison", resort_name, report_date_string)
