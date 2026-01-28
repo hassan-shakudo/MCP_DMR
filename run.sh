@@ -28,7 +28,7 @@ echo "   - RUN_DATE (optional, defaults to yesterday)"
 echo ""
 
 # Run the DMR generator
-python main.py
+python3 main.py
 
 echo ""
 echo "✅ DMR Generator completed!"

@@ -6,9 +6,9 @@ Mountain Capital Partners - Ski Resort Data Analysis
 import os
 from typing import Dict
 from types import SimpleNamespace
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv()
+# load_dotenv()
 
 
 class DatabaseConfig:
