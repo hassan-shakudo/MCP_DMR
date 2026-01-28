@@ -1094,7 +1094,7 @@ class AnalysisEngine:
         for col_name in column_structure:
             if col_name.endswith(" (Budget)"):
                 range_key = self._get_budget_range_name(col_name)
-                total_val = sum(processed_budget.get(range_key, {}).values())
+                total_val = sum(processed_visits_budget.get(range_key, {}).values())
             else:
                 total_val = sum(processed_visits[col_name].values())
             total_tickets_row["values"].append(DataUtils.normalize_value(total_val))
