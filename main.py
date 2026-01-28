@@ -15,7 +15,7 @@ def main():
         log("Starting DMR Generator...")
 
         # Check required environment variables
-        required_vars = ['RESORT_NAME', 'DB_NAME', 'GROUP_NUM']
+        required_vars = ['RESORT_NAME', 'DB_NAME', 'GROUP_NUM', 'RUN_DATE', 'MCP_DB_USERNAME', 'MCP_DB_PASSWORD', 'MCP_DB_SERVER', 'MCP_DB_PORT', 'MCP_DB_NAME']
         missing_vars = [var for var in required_vars if not os.getenv(var)]
 
         if missing_vars:

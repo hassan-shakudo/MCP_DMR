@@ -1189,7 +1189,7 @@ class AnalysisEngine:
     def generate_analysis(self, resort_config: Dict = None, run_date: Union[str, datetime] = None,
                          debug: bool = False, file_name_postfix: str = None,
                          analysis_type: str = "rep") -> Dict[str, str]:
-        
+        print(f"Here in the function")
         result = {'report_path': None, 'insights_path': None}
         analysis_type = analysis_type.lower()
         generate_report = analysis_type in ["rep", "both"]
