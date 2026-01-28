@@ -1132,11 +1132,27 @@ class AnalysisEngine:
                 payroll_row["values"].append(DataUtils.normalize_value(value))
             rows.append(payroll_row)
 
+            # PR % row
+            pr_percent_row = {"type": "data", "row_header": f"PR % of {title}", "values": []}
+            for col_name in column_structure:
+                if col_name.endswith(" (Budget)"):
+                    range_key = self._get_budget_range_name(col_name)
+                    budget_data = processed_budget.get(range_key, {}).get(trimmed_code, {})
+                    revenue = abs(DataUtils.normalize_value(budget_data.get('Revenue', 0)))
+                    payroll = abs(DataUtils.normalize_value(budget_data.get('Payroll', 0)))
+                else:
+                    revenue = abs(DataUtils.normalize_value(processed_revenue[col_name].get(trimmed_code, 0)))
+                    payroll = abs(DataUtils.normalize_value(processed_payroll[col_name].get(trimmed_code, 0)))
+
+                percentage = (payroll / revenue * 100) if revenue != 0 else 0
+                pr_percent_row["values"].append(DataUtils.normalize_value(percentage))
+            rows.append(pr_percent_row)
+
         # Empty row
         rows.append({"type": "empty", "row_header": "", "values": [""] * len(column_structure)})
 
         # Totals section
-        total_labels = ["Total Revenue", "Total Payroll", "Contribution", "PR %"]
+        total_labels = ["Total Revenue", "Total Payroll", "PR % of Total Revenue", "Net Total Revenue"]
         for label in total_labels:
             total_row = {"type": "total", "row_header": label, "values": []}
             for col_name in column_structure:
@@ -1148,18 +1164,18 @@ class AnalysisEngine:
                     elif label == "Total Payroll":
                         final_value = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
                                          for dept in departments_set)
-                    elif label == "Contribution":
-                        revenue_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
-                                           for dept in departments_set)
-                        payroll_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
-                                           for dept in departments_set)
-                        final_value = revenue_total - payroll_total
-                    else:  # PR %
+                    elif label == "PR % of Total Revenue":
                         revenue_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
                                            for dept in departments_set)
                         payroll_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
                                            for dept in departments_set)
                         final_value = (abs(payroll_total) / abs(revenue_total) * 100) if revenue_total != 0 else 0
+                    else:  # Net Total Revenue
+                        revenue_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Revenue', 0)
+                                           for dept in departments_set)
+                        payroll_total = sum(processed_budget.get(range_key, {}).get(dept, {}).get('Payroll', 0)
+                                           for dept in departments_set)
+                        final_value = revenue_total - payroll_total
                 else:
                     revenue_total = sum(processed_revenue[col_name].get(DataUtils.trim_dept_code(dept), 0)
                                        for dept in departments_set)
@@ -1170,9 +1186,9 @@ class AnalysisEngine:
                         final_value = revenue_total
                     elif label == "Total Payroll":
                         final_value = payroll_total
-                    elif label == "PR %":
+                    elif label == "PR % of Total Revenue":
                         final_value = (abs(payroll_total) / abs(revenue_total) * 100) if revenue_total != 0 else 0
-                    else:
+                    else:  # Net Total Revenue
                         final_value = revenue_total - payroll_total
 
                 total_row["values"].append(DataUtils.normalize_value(final_value))

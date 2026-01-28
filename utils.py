@@ -33,17 +33,17 @@ class DataUtils:
     """General data processing utility methods"""
     
     @staticmethod
-    def normalize_value(value: Any) -> float:
-        """Safely convert numeric values (handles Decimal, None, NaN, Inf, etc.)"""
+    def normalize_value(value: Any) -> int:
+        """Safely convert numeric values to integers (handles Decimal, None, NaN, Inf, etc.)"""
         if value is None:
-            return 0.0
+            return 0
         try:
             val = float(value)
             if math.isnan(val) or math.isinf(val):
-                return 0.0
-            return val
+                return 0
+            return round(val)
         except (TypeError, ValueError):
-            return 0.0
+            return 0
 
     @staticmethod
     def trim_dept_code(code: Any) -> str:
