@@ -3,13 +3,12 @@ MCP Database Report Generator - Single Resort Entry Point
 Reads configuration from environment variables
 """
 
+print(f"[{__name__}] main.py loaded - __name__ = '{__name__}'")
+
 import sys
 import os
 from analysis_engine import AnalysisEngine
 from utils import log
-
-# This executes immediately when the file is loaded (before any if __name__ check)
-print(f"[{__name__}] main.py loaded - __name__ = '{__name__}'")
 
 def main():
     try:
