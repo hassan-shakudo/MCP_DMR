@@ -925,8 +925,8 @@ class AnalysisEngine:
                 worksheet.write(row, i + 1, value, snow_format)
         return row + 2
 
-    def _write_visits_section(self, worksheet, row, columns, processed_visits, processed_budget, 
-                              all_locations, resort_name, row_header_format, data_format, header_format):
+    def _write_visits_section(self, worksheet, row, columns, processed_visits, processed_budget,
+                              all_locations, row_header_format, data_format, header_format):
         worksheet.write(row, 0, "VISITS", header_format)
         row += 1
         for location in sorted(list(all_locations)):
@@ -934,7 +934,8 @@ class AnalysisEngine:
             for i, col_name in enumerate(columns):
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
-                    loc_key = DataUtils.process_location_name(location, resort_name)
+                    dept_code = location[:5]
+                    loc_key = VISITS_DEPT_CODE_MAPPING.get(dept_code, '')
                     value = processed_budget.get(range_key, {}).get(loc_key, 0)
                 else:
                     value = processed_visits[col_name].get(location, 0)
@@ -1082,8 +1083,9 @@ class AnalysisEngine:
             for col_name in column_structure:
                 if col_name.endswith(" (Budget)"):
                     range_key = self._get_budget_range_name(col_name)
-                    loc_key = DataUtils.process_location_name(location, resort_name)
-                    value = processed_budget.get(range_key, {}).get(loc_key, 0)
+                    dept_code = location[:5]
+                    loc_key = VISITS_DEPT_CODE_MAPPING.get(dept_code, '')
+                    value = processed_visits_budget.get(range_key, {}).get(loc_key, 0)
                 else:
                     value = processed_visits[col_name].get(location, 0)
                 location_row["values"].append(DataUtils.normalize_value(value))
@@ -1408,7 +1410,7 @@ class AnalysisEngine:
                     worksheet.freeze_panes(1, 1)
 
                     current_row = self._write_snow_section(worksheet, 1, column_structure, processed_snow, snow_format, row_header_format)
-                    current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, resort_name, row_header_format, data_format, header_format)
+                    current_row = self._write_visits_section(worksheet, current_row, column_structure, processed_visits, processed_visits_budget, locations_set, row_header_format, data_format, header_format)
                     current_row = self._write_financials_section(worksheet, current_row, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), code_to_title_map, row_header_format, data_format, header_format, percent_format)
                     self._write_totals_section(worksheet, current_row + 1, column_structure, processed_revenue, processed_payroll, processed_budget, sorted(list(departments_set)), data_format, header_format, percent_format)
 
