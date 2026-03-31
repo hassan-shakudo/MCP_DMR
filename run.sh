@@ -1,23 +1,16 @@
 #!/bin/bash
-# Run script for MCP Database Report Generator
-# Ensures dependencies are installed and runs the DMR generator
+# Run script for MCP Database Report Generator using a prebuilt runtime image.
 
-set -e  # Exit on error
+set -euo pipefail
 
-echo "🔧 Checking dependencies..."
-
-# Check if setup has been run by checking for ODBC driver
-if ! odbcinst -q -d | grep -q "ODBC Driver 18"; then
-    echo "📦 ODBC Driver not found. Running setup..."
-    bash setup.sh
-else
-    echo "✅ ODBC Driver 18 found"
-
-    # Still install/update Python dependencies
-    echo "📦 Installing Python dependencies..."
-    pip install -r requirements.txt
+echo "🔧 Validating runtime image dependencies..."
+if ! command -v odbcinst >/dev/null 2>&1 || ! odbcinst -q -d | grep -q "ODBC Driver 18"; then
+    echo "❌ ODBC Driver 18 for SQL Server is not available in the runtime image."
+    echo "   Please use the prebuilt DMR runtime image/environment config."
+    exit 1
 fi
 
+echo "✅ Runtime image dependencies detected"
 echo ""
 echo "🚀 Starting DMR Generator..."
 echo "📍 Configuration will be read from environment variables:"
@@ -27,7 +20,6 @@ echo "   - GROUP_NUM"
 echo "   - RUN_DATE (optional, defaults to yesterday)"
 echo ""
 
-# Run the DMR generator
 python3 main.py
 
 echo ""
